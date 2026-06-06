@@ -1,0 +1,217 @@
+# =============================================================================
+# config.yaml — Configuración central del sistema value investing TFG
+# =============================================================================
+# Todos los umbrales y supuestos están aquí. Nada está hardcodeado en el código.
+# Modifica este fichero para recalibrar el sistema o hacer análisis de sensibilidad.
+# =============================================================================
+
+# -----------------------------------------------------------------------------
+# SEC EDGAR — fuente de datos fundamentales
+# -----------------------------------------------------------------------------
+sec:
+  contact_email: "jianwu.hu.04@gmail.com"   # EDITA ESTO: identificador requerido por la SEC
+  base_url: "https://data.sec.gov"
+  submissions_url: "https://data.sec.gov/submissions"
+  facts_url: "https://data.sec.gov/api/xbrl/companyfacts"
+  # Pausa entre peticiones para respetar el rate limit de la SEC (10 req/s)
+  request_delay_seconds: 0.15
+  # Número máximo de reintentos ante errores 429/503
+  max_retries: 3
+
+# -----------------------------------------------------------------------------
+# Universo de empresas
+# -----------------------------------------------------------------------------
+universe:
+  index: "SP500"
+  # Número mínimo de años de histórico de fundamentales requeridos
+  min_history_years: 4
+  # Fecha de inicio del backtest (se necesitan datos desde antes para el lookback)
+  backtest_start: "2013-01-01"
+  backtest_end: "2025-12-31"
+
+# -----------------------------------------------------------------------------
+# Descarga de precios (yfinance)
+# -----------------------------------------------------------------------------
+prices:
+  index_ticker: "^GSPC"           # S&P 500
+  # Ticker de la letra del Tesoro a 13 semanas (tipo libre de riesgo)
+  risk_free_ticker: "^IRX"
+  # Frecuencia de precios para el backtest
+  price_frequency: "monthly"
+
+# -----------------------------------------------------------------------------
+# Caché y persistencia
+# -----------------------------------------------------------------------------
+cache:
+  raw_dir: "data/raw"
+  cache_dir: "data/cache"
+  # Formato de serialización para DataFrames
+  format: "parquet"
+  # Días antes de considerar que un fichero de caché está obsoleto
+  max_age_days: 7
+
+# -----------------------------------------------------------------------------
+# Etapa 2 — Filtros de descarte
+# -----------------------------------------------------------------------------
+filters:
+  # Sectores excluidos (basado en códigos SIC agrupados)
+  excluded_sectors:
+    - "Banking"            # bancos comerciales y de inversión
+    - "Insurance"          # aseguradoras
+    - "Utilities"          # utilities reguladas
+  
+  # Deuda
+  debt:
+    # Deuda Neta / EBITDA máximo permitido
+    max_net_debt_ebitda: 4.0
+    # Número de años consecutivos en que debe superarse para descartar
+    sustained_years: 3
+    # Cobertura mínima de intereses (EBIT / gastos financieros)
+    min_interest_coverage: 2.0
+  
+  # Dilución del accionista
+  dilution:
+    # Crecimiento máximo anual de acciones en circulación (%)
+    max_share_growth_pct: 3.0
+    # Número de años consecutivos en que debe superarse para descartar
+    sustained_years: 3
+  
+  # Rentabilidad básica
+  profitability:
+    # Máximo número de años con pérdidas netas en el histórico
+    max_loss_years: 2
+    # Máximo número de años con FCF negativo en el histórico
+    max_negative_fcf_years: 2
+    # Ventana de histórico a revisar (años)
+    lookback_years: 5
+  
+  # Calidad contable
+  accounting_quality:
+    # CFO / Beneficio Neto mínimo
+    min_cfo_to_net_income: 0.5
+    # Número de años consecutivos en que debe incumplirse para descartar
+    sustained_years: 3
+
+# -----------------------------------------------------------------------------
+# Etapa 3 — Puntuación de calidad (F-Score de Piotroski adaptado)
+# -----------------------------------------------------------------------------
+quality:
+  # Pesos del F-Score adaptado (9 criterios originales de Piotroski)
+  fscore_weight: 0.6
+  # Complementos: intensidad de capital y tendencia de márgenes
+  capex_intensity_weight: 0.2
+  margin_trend_weight: 0.2
+  
+  # Puntuación mínima para pasar la etapa de calidad (sobre 1.0)
+  min_quality_score: 0.5
+
+# -----------------------------------------------------------------------------
+# Etapa 4 — Valoración compuesta
+# -----------------------------------------------------------------------------
+valuation:
+  dcf:
+    # Número de años de proyección explícita
+    projection_years: 10
+    # Tasa de crecimiento del valor terminal (Gordon)
+    terminal_growth_rate: 0.025
+    # Prima de riesgo de mercado para CAPM
+    equity_risk_premium: 0.055
+    # Prima adicional por tamaño (small cap)
+    size_premium: 0.01
+    # Rango de variación de WACC para el análisis de sensibilidad
+    wacc_sensitivity_range: 0.02   # ± 2 pp
+    # Rango de variación de la tasa terminal para sensibilidad
+    terminal_growth_sensitivity_range: 0.01  # ± 1 pp
+  
+  multiples:
+    # Percentil usado para la mediana sectorial (50 = mediana estricta)
+    sector_percentile: 50
+    # Múltiplos utilizados
+    metrics:
+      - "PE"
+      - "EV_EBIT"
+      - "EV_EBITDA"
+      - "P_FCF"
+  
+  # Jerarquía de integración del rango de valor
+  integration:
+    dcf_weight: 0.60
+    multiples_weight: 0.30
+    graham_weight: 0.10
+
+# -----------------------------------------------------------------------------
+# Etapa 5 — Margen de seguridad y construcción de cartera
+# -----------------------------------------------------------------------------
+portfolio:
+  # Margen de seguridad mínimo para entrar en la cartera (%)
+  min_margin_of_safety: 0.30     # 30%
+  # Máximo número de posiciones
+  max_positions: 15
+  # Ponderación (equiponderada por defecto)
+  weighting: "equal"             # opciones: "equal", "quality_weighted"
+  
+  # Pesos de la regla de priorización (calidad vs. margen de seguridad)
+  quality_weight: 0.50
+  margin_weight: 0.50
+
+# -----------------------------------------------------------------------------
+# Backtest (B1)
+# -----------------------------------------------------------------------------
+backtest:
+  # Periodo de calibración / validación
+  calibration_end: "2018-12-31"
+  validation_start: "2019-01-01"
+  
+  # Revisión de fundamentales: con cada nuevo 10-K (anual)
+  fundamentals_review: "annual"
+  
+  # Vigilancia de ventas: mensual
+  sell_monitoring: "monthly"
+  
+  # Condición de venta por convergencia: margen de seguridad por debajo de (%)
+  sell_threshold_margin: 0.05    # 5%
+  
+  # Coste de transacción por operación (% del valor operado)
+  transaction_cost_pct: 0.001    # 0.1%
+  
+  # Tratamiento de dividendos: "total_return" (reinvertidos) o "cash"
+  dividend_treatment: "total_return"
+  
+  # Remuneración de la liquidez: "risk_free" (tipo a corto) o "zero"
+  cash_yield: "risk_free"
+
+# -----------------------------------------------------------------------------
+# Simulación de aportación (B2)
+# -----------------------------------------------------------------------------
+contributions:
+  # Aportación periódica de referencia (DCA fijo)
+  periodic_amount: 1000.0        # unidades monetarias (indexadas; da igual la divisa)
+  # Frecuencia de aportación
+  frequency: "monthly"
+  
+  # DCA condicional: factor de escala según el margen de seguridad
+  # aportación = periodic_amount * scale_factor(margin_of_safety)
+  conditional_dca:
+    # Margen a partir del cual la aportación empieza a escalar
+    base_margin: 0.30
+    # Margen al que se suspende la aportación (muy poco descuento)
+    suspend_below_margin: 0.05
+    # Máximo multiplicador de la aportación
+    max_scale_factor: 2.0
+  
+  # Aportación concentrada: umbral de descuento para concentrar
+  concentrated:
+    min_margin: 0.45             # 45% de descuento mínimo para activar
+    multiplier: 3.0              # 3× la aportación base
+
+# -----------------------------------------------------------------------------
+# Outputs
+# -----------------------------------------------------------------------------
+outputs:
+  dir: "outputs"
+  figures_dir: "outputs/figures"
+  tables_dir: "outputs/tables"
+  # Formato de las figuras (pdf recomendado para LaTeX)
+  figure_format: "pdf"
+  # DPI para figuras rasterizadas de respaldo
+  figure_dpi: 150

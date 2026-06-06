@@ -1,0 +1,60 @@
+# ── Entorno virtual ──────────────────────────────────────────────────────────
+.venv/
+venv/
+env/
+ENV/
+
+# ── Contexto Claude ──────────────────────────────────────────────────────────
+CLAUDE.md
+
+# ── Datos descargados (se regeneran ejecutando el pipeline) ──────────────────
+data/
+
+# ── Datos descargados (se regeneran ejecutando el pipeline) ──────────────────
+docs/
+
+# ── Python ────────────────────────────────────────────────────────────────────
+__pycache__/
+*.py[cod]
+*$py.class
+*.pyo
+*.pyd
+.Python
+*.egg
+*.egg-info/
+dist/
+build/
+*.so
+
+# ── Pytest / cobertura ────────────────────────────────────────────────────────
+.pytest_cache/
+.coverage
+htmlcov/
+coverage.xml
+*.lcov
+
+# ── Ruff ──────────────────────────────────────────────────────────────────────
+.ruff_cache/
+
+# ── Outputs generados (LaTeX, gráficas) ──────────────────────────────────────
+outputs/
+*.pdf
+*.png
+*.svg
+*.tex
+
+# ── IDEs y SO ─────────────────────────────────────────────────────────────────
+.vscode/
+.idea/
+*.swp
+*.swo
+.DS_Store
+Thumbs.db
+
+# ── Secretos / variables de entorno ──────────────────────────────────────────
+.env
+*.env
+
+# ── Jupyter (si se usan para exploración) ────────────────────────────────────
+.ipynb_checkpoints/
+*.ipynb

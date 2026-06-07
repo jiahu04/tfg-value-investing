@@ -13,10 +13,49 @@ sec:
   base_url: "https://data.sec.gov"
   submissions_url: "https://data.sec.gov/submissions"
   facts_url: "https://data.sec.gov/api/xbrl/companyfacts"
+  # Mapa oficial ticker -> CIK (lo publica la SEC, no es una API con clave)
+  tickers_url: "https://www.sec.gov/files/company_tickers.json"
   # Pausa entre peticiones para respetar el rate limit de la SEC (10 req/s)
   request_delay_seconds: 0.15
   # Número máximo de reintentos ante errores 429/503
   max_retries: 3
+  # Conceptos XBRL que se extraen de companyfacts (lista curada; se ignora el resto).
+  # Cada entrada: tag (etiqueta XBRL), unit (unidad a leer) y taxonomy (us-gaap por
+  # defecto, dei para algunos). El paso 1.2 deriva FCF, deuda neta, EBITDA, ratios, etc.
+  # a partir de estos crudos, conservando siempre la fecha de publicación (filed).
+  concepts:
+    # --- Cuenta de resultados ---
+    - {tag: "Revenues", unit: "USD"}
+    - {tag: "RevenueFromContractWithCustomerExcludingAssessedTax", unit: "USD"}
+    - {tag: "CostOfRevenue", unit: "USD"}
+    - {tag: "CostOfGoodsAndServicesSold", unit: "USD"}
+    - {tag: "GrossProfit", unit: "USD"}
+    - {tag: "OperatingIncomeLoss", unit: "USD"}
+    - {tag: "NetIncomeLoss", unit: "USD"}
+    - {tag: "InterestExpense", unit: "USD"}
+    - {tag: "IncomeTaxExpenseBenefit", unit: "USD"}
+    # --- Flujos de caja ---
+    - {tag: "NetCashProvidedByUsedInOperatingActivities", unit: "USD"}
+    - {tag: "PaymentsToAcquirePropertyPlantAndEquipment", unit: "USD"}
+    - {tag: "DepreciationDepletionAndAmortization", unit: "USD"}
+    - {tag: "DepreciationAmortizationAndAccretionNet", unit: "USD"}
+    # --- Balance ---
+    - {tag: "Assets", unit: "USD"}
+    - {tag: "AssetsCurrent", unit: "USD"}
+    - {tag: "Liabilities", unit: "USD"}
+    - {tag: "LiabilitiesCurrent", unit: "USD"}
+    - {tag: "CashAndCashEquivalentsAtCarryingValue", unit: "USD"}
+    - {tag: "ShortTermInvestments", unit: "USD"}
+    - {tag: "LongTermDebtNoncurrent", unit: "USD"}
+    - {tag: "LongTermDebtCurrent", unit: "USD"}
+    - {tag: "LongTermDebt", unit: "USD"}
+    - {tag: "DebtCurrent", unit: "USD"}
+    - {tag: "StockholdersEquity", unit: "USD"}
+    # --- Acciones en circulación ---
+    - {tag: "CommonStockSharesOutstanding", unit: "shares"}
+    - {tag: "WeightedAverageNumberOfSharesOutstandingBasic", unit: "shares"}
+    - {tag: "WeightedAverageNumberOfDilutedSharesOutstanding", unit: "shares"}
+    - {tag: "EntityCommonStockSharesOutstanding", unit: "shares", taxonomy: "dei"}
 
 # -----------------------------------------------------------------------------
 # Universo de empresas
@@ -38,6 +77,49 @@ prices:
   risk_free_ticker: "^IRX"
   # Frecuencia de precios para el backtest
   price_frequency: "1d"          # precios diarios
+
+# -----------------------------------------------------------------------------
+# Constituyentes históricos del índice (universo point-in-time)
+# -----------------------------------------------------------------------------
+# CSV público con la composición histórica del S&P 500 (mitiga el sesgo de
+# supervivencia). Cada fila es una fecha con la lista de tickers vigentes ese día.
+constituents:
+  # El fichero histórico del repo fja05680/sp500 lleva la fecha de actualización en
+  # el nombre y se renueva periódicamente (una URL fija acaba dando 404). Para que el
+  # proyecto siga siendo reproducible, se localiza dinámicamente el CSV más reciente
+  # que cumpla el patrón, vía la API de contenidos de GitHub.
+  repo_contents_url: "https://api.github.com/repos/fja05680/sp500/contents"
+  file_pattern: "S&P 500 Historical Components & Changes\\((\\d{2}-\\d{2}-\\d{4})\\)\\.csv"
+  # Override opcional: si se indica una URL directa, se usa esa y se omite el descubrimiento.
+  url: ""
+  # Nombre del fichero crudo cacheado bajo data/raw/constituents/
+  raw_file: "sp500_historical.csv"
+  # Nombre de la columna de fecha y de la de tickers en el CSV de origen
+  date_column: "date"
+  tickers_column: "tickers"
+  # Separador de los tickers dentro de la celda
+  tickers_separator: ","
+
+# -----------------------------------------------------------------------------
+# Sector a partir del código SIC de la SEC
+# -----------------------------------------------------------------------------
+# Se agrupan los códigos SIC en sectores. Las etiquetas Banking / Insurance /
+# Utilities deben coincidir con filters.excluded_sectors. Cada grupo define rangos
+# [desde, hasta] de SIC (ambos inclusive). Lo que no caiga en ningún rango -> default.
+sectors:
+  default: "Other"
+  sic_groups:
+    Agriculture:    [[100, 999]]
+    Mining:         [[1000, 1499]]
+    Construction:   [[1500, 1799]]
+    Manufacturing:  [[2000, 3999]]
+    Transportation: [[4000, 4899]]
+    Utilities:      [[4900, 4999]]
+    Trade:          [[5000, 5999]]
+    Banking:        [[6000, 6199]]
+    Finance:        [[6200, 6299], [6500, 6799]]
+    Insurance:      [[6300, 6499]]
+    Services:       [[7000, 8999]]
 
 # -----------------------------------------------------------------------------
 # Caché y persistencia

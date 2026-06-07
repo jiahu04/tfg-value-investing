@@ -229,30 +229,63 @@ Antes de cada commit. Si ruff encuentra errores, el código no está listo para 
 
 ## 8. Ejecutar el pipeline
 
-> **Nota:** los módulos del pipeline aún no están implementados (Fases 1–3 del plan de desarrollo). Esta sección se irá completando a medida que se implementen.
+> **Nota:** de momento está implementada la **Etapa 1 (adquisición de datos, paso 1.1)**. El resto de etapas (pipeline de selección, backtest y aportación) se irán añadiendo en las Fases 1–3 del plan.
+
+### Ingesta de datos (Etapa 1)
+
+Descarga y cachea en local todos los datos: fundamentales de la SEC (conservando la fecha de publicación), precios de acciones, índice y tipo libre de riesgo, composición histórica del índice y sector por código SIC.
 
 ```bash
-# Descarga y cachea todos los datos — solo necesario la primera vez
-python -m src.ingest.run
+# Ingesta completa (primera vez): SEC + yfinance + constituyentes
+python -m src.ingest.run_ingest --step all
 
-# Ejecuta el pipeline de selección (lista priorizada sobre la fecha actual)
-python -m src.pipeline.run
+# Prueba rápida acotada a N empresas (recomendado para validar el entorno)
+python -m src.ingest.run_ingest --step all --limit 3
 
-# Ejecuta el backtesting completo (2013–2025)
-python -m src.backtest.run
+# Ejecutar solo un paso concreto
+python -m src.ingest.run_ingest --step tickers        # mapa ticker<->CIK
+python -m src.ingest.run_ingest --step constituents   # composición histórica
+python -m src.ingest.run_ingest --step sectors        # SIC -> sector
+python -m src.ingest.run_ingest --step fundamentals   # companyfacts (con `filed`)
+python -m src.ingest.run_ingest --step prices         # precios, índice y tipo libre
 
-# Simula las tres estrategias de aportación
-python -m src.contributions.run
+# Forzar re-descarga aunque exista el crudo en data/raw
+python -m src.ingest.run_ingest --step all --force
 ```
 
-Los resultados (tablas LaTeX y gráficas) se generan en `outputs/`.
+La ingesta es **reejecutable**: el crudo se guarda en `data/raw` y la caché se reconstruye desde ahí sin volver a descargar (salvo `--force`). Layout generado:
 
-Para forzar una descarga limpia de datos (si los datos están corruptos o desactualizados):
+```
+data/raw/sec/company_tickers.json          # mapa ticker -> CIK
+data/raw/sec/companyfacts/CIK##########.json
+data/raw/sec/submissions/CIK##########.json
+data/raw/constituents/sp500_historical.csv
+data/cache/tickers.parquet
+data/cache/constituents.parquet            # date, ticker (point-in-time)
+data/cache/sectors.csv                     # ticker, cik, sic, sector
+data/cache/fundamentals.parquet            # tidy, con fecha de publicación `filed`
+data/cache/prices.parquet                  # precios ajustados de las acciones
+data/cache/index_prices.parquet            # ^SP500TR
+data/cache/risk_free.parquet               # ^IRX
+```
+
+> **Nota (yfinance):** si la descarga de precios falla con `database is locked`, es la caché interna de yfinance; reintenta `--step prices --force`.
+
+### Resto del pipeline (aún no implementado)
+
 ```bash
-# Borrar la caché y volver a descargar
-rm -rf data/cache/     # macOS / Linux
-rmdir /s data\cache\   # Windows
-python -m src.ingest.run
+python -m src.pipeline.run        # Etapas 2–5: lista priorizada (pendiente)
+python -m src.backtest.run        # backtesting 2013–2025 (pendiente)
+python -m src.contributions.run   # estrategias de aportación (pendiente)
+```
+
+Los resultados (tablas LaTeX y gráficas) se generarán en `outputs/`.
+
+Para forzar una descarga limpia de datos:
+```bash
+rm -rf data/cache/ data/raw/     # macOS / Linux
+rmdir /s data\cache & rmdir /s data\raw   # Windows
+python -m src.ingest.run_ingest --step all
 ```
 
 ---
@@ -267,6 +300,15 @@ value-investing-tfg/
 │
 ├── src/
 │   ├── ingest/                  ← Etapa 1: descarga y caché de datos (SEC + yfinance)
+│   │   ├── cache_io.py          ← persistencia local (Parquet/CSV/JSON)
+│   │   ├── http_client.py       ← sesión HTTP de la SEC (User-Agent, rate-limit, reintentos)
+│   │   ├── sec_tickers.py       ← mapa ticker <-> CIK
+│   │   ├── sec_facts.py         ← fundamentales (companyfacts) conservando `filed`
+│   │   ├── sec_submissions.py   ← SIC y nombre por empresa
+│   │   ├── sectors.py           ← agrupación de códigos SIC en sectores
+│   │   ├── prices.py            ← precios, índice y tipo libre de riesgo (yfinance)
+│   │   ├── constituents.py      ← composición histórica point-in-time
+│   │   └── run_ingest.py        ← orquestador/CLI (--step / --limit / --force)
 │   ├── pipeline/                ← Etapas 2–5: filtros, calidad, valoración, selección
 │   ├── backtest/                ← Módulo B1: motor de backtesting (2013–2025)
 │   ├── contributions/           ← Módulo B2: simulación de estrategias de aportación

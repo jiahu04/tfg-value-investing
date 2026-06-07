@@ -33,11 +33,11 @@ universe:
 # Descarga de precios (yfinance)
 # -----------------------------------------------------------------------------
 prices:
-  index_ticker: "^GSPC"           # S&P 500
+  index_ticker: "^SP500TR"            # S&P 500 Total Return (con dividendos)
   # Ticker de la letra del Tesoro a 13 semanas (tipo libre de riesgo)
   risk_free_ticker: "^IRX"
   # Frecuencia de precios para el backtest
-  price_frequency: "monthly"
+  price_frequency: "1d"          # precios diarios
 
 # -----------------------------------------------------------------------------
 # Caché y persistencia
@@ -165,8 +165,8 @@ backtest:
   # Revisión de fundamentales: con cada nuevo 10-K (anual)
   fundamentals_review: "annual"
   
-  # Vigilancia de ventas: mensual
-  sell_monitoring: "monthly"
+  # Vigilancia de ventas: semanal
+  sell_monitoring: "weekly"
   
   # Condición de venta por convergencia: margen de seguridad por debajo de (%)
   sell_threshold_margin: 0.05    # 5%

@@ -8,9 +8,8 @@ Ejecutar con:
 from __future__ import annotations
 
 import pytest
-from pathlib import Path
-from src.utils.config_loader import *
 
+from src.utils.config_loader import get_config, load_config, reload_config
 
 # ---------------------------------------------------------------------------
 # Fixtures

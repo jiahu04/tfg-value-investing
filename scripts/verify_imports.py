@@ -31,7 +31,7 @@ def check_imports() -> bool:
     max_len = max(len(mod) for mod, _ in REQUIRED)
 
     print("Verificando importaciones...\n")
-    for module_name, alias in REQUIRED:
+    for module_name, _alias in REQUIRED:
         try:
             mod = __import__(module_name)
             version = getattr(mod, "__version__", "?")

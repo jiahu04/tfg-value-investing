@@ -255,10 +255,12 @@ filters:
 quality:
   # Pesos del F-Score adaptado (9 criterios originales de Piotroski)
   fscore_weight: 0.6
-  # Complementos: intensidad de capital y tendencia de márgenes
+  # Complementos: intensidad de capital (capex/CFO) y tendencia del margen operativo
   capex_intensity_weight: 0.2
   margin_trend_weight: 0.2
-  
+  # Ventana (años) sobre la que se evalúan los dos complementos
+  trend_window_years: 4
+
   # Puntuación mínima para pasar la etapa de calidad (sobre 1.0)
   min_quality_score: 0.5
 

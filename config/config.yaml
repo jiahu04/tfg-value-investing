@@ -268,6 +268,8 @@ quality:
 # Etapa 4 — Valoración compuesta
 # -----------------------------------------------------------------------------
 valuation:
+  # Constante de Graham (PER 15 × P/VC 1,5 = 22,5)
+  graham_multiplier: 22.5
   dcf:
     # Número de años de proyección explícita
     projection_years: 10
@@ -277,11 +279,24 @@ valuation:
     equity_risk_premium: 0.055
     # Prima adicional por tamaño (small cap)
     size_premium: 0.01
+    # Tipo impositivo efectivo (fallback si no se puede derivar de las cuentas)
+    tax_rate: 0.21
+    # Beta vía CAPM: ventana (años) y frecuencia de las rentabilidades para la regresión
+    beta_window_years: 2
+    beta_return_frequency: "W"     # W=semanal, ME=mensual (alias de pandas)
+    # Beta por defecto cuando no hay suficiente histórico de precios
+    default_beta: 1.0
+    # Diferencial sobre el tipo libre de riesgo para el coste de deuda (fallback)
+    cost_of_debt_spread: 0.02
+    # Tope del crecimiento inicial de la fase explícita (se acota a [terminal, growth_cap])
+    growth_cap: 0.10
+    # Años para normalizar (promediar) el FCFF base
+    fcff_normalization_years: 3
     # Rango de variación de WACC para el análisis de sensibilidad
     wacc_sensitivity_range: 0.02   # ± 2 pp
     # Rango de variación de la tasa terminal para sensibilidad
     terminal_growth_sensitivity_range: 0.01  # ± 1 pp
-  
+
   multiples:
     # Percentil usado para la mediana sectorial (50 = mediana estricta)
     sector_percentile: 50

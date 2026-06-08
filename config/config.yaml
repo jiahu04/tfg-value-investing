@@ -13,20 +13,24 @@ sec:
   base_url: "https://data.sec.gov"
   submissions_url: "https://data.sec.gov/submissions"
   facts_url: "https://data.sec.gov/api/xbrl/companyfacts"
-  # Mapa oficial ticker -> CIK (lo publica la SEC, no es una API con clave)
+  # La SEC no identifica las empresas por su ticker (AAPL) sino por un número CIK (320193), que es el que hay que usar para descargar los datos.
+  # Mapa oficial para pasar identificar el ticker a través del CIK (lo publica la SEC, no es una API con clave)
   tickers_url: "https://www.sec.gov/files/company_tickers.json"
   # Pausa entre peticiones para respetar el rate limit de la SEC (10 req/s)
   request_delay_seconds: 0.15
   # Número máximo de reintentos ante errores 429/503
   max_retries: 3
   # Conceptos XBRL que se extraen de companyfacts (lista curada; se ignora el resto).
-  # Cada entrada: tag (etiqueta XBRL), unit (unidad a leer) y taxonomy (us-gaap por
-  # defecto, dei para algunos). El paso 1.2 deriva FCF, deuda neta, EBITDA, ratios, etc.
-  # a partir de estos crudos, conservando siempre la fecha de publicación (filed).
+  # Cada entrada: tag (etiqueta XBRL), unit (unidad a leer) y taxonomy (us-gaap por defecto, dei para algunos).
+  # Solo se extraen los conceptos necesarios.
   concepts:
     # --- Cuenta de resultados ---
+    # Ingresos: distintas etiquetas según empresa/año (las clásicas Sales* anteriores
+    # a 2018 conviven con Revenues y la nueva RevenueFromContract...).
     - {tag: "Revenues", unit: "USD"}
     - {tag: "RevenueFromContractWithCustomerExcludingAssessedTax", unit: "USD"}
+    - {tag: "SalesRevenueNet", unit: "USD"}
+    - {tag: "SalesRevenueGoodsNet", unit: "USD"}
     - {tag: "CostOfRevenue", unit: "USD"}
     - {tag: "CostOfGoodsAndServicesSold", unit: "USD"}
     - {tag: "GrossProfit", unit: "USD"}
@@ -35,9 +39,12 @@ sec:
     - {tag: "InterestExpense", unit: "USD"}
     - {tag: "IncomeTaxExpenseBenefit", unit: "USD"}
     # --- Flujos de caja ---
+    # capex y D&A: variantes según sector (industriales/aerolíneas usan tags propios).
     - {tag: "NetCashProvidedByUsedInOperatingActivities", unit: "USD"}
     - {tag: "PaymentsToAcquirePropertyPlantAndEquipment", unit: "USD"}
+    - {tag: "PaymentsToAcquireProductiveAssets", unit: "USD"}
     - {tag: "DepreciationDepletionAndAmortization", unit: "USD"}
+    - {tag: "DepreciationAndAmortization", unit: "USD"}
     - {tag: "DepreciationAmortizationAndAccretionNet", unit: "USD"}
     # --- Balance ---
     - {tag: "Assets", unit: "USD"}
@@ -46,10 +53,15 @@ sec:
     - {tag: "LiabilitiesCurrent", unit: "USD"}
     - {tag: "CashAndCashEquivalentsAtCarryingValue", unit: "USD"}
     - {tag: "ShortTermInvestments", unit: "USD"}
+    # Deuda: tramos y totales, incluyendo variantes con obligaciones de leasing
     - {tag: "LongTermDebtNoncurrent", unit: "USD"}
+    - {tag: "LongTermDebtAndCapitalLeaseObligations", unit: "USD"}
     - {tag: "LongTermDebtCurrent", unit: "USD"}
-    - {tag: "LongTermDebt", unit: "USD"}
+    - {tag: "LongTermDebtAndCapitalLeaseObligationsCurrent", unit: "USD"}
     - {tag: "DebtCurrent", unit: "USD"}
+    - {tag: "LongTermDebt", unit: "USD"}
+    - {tag: "DebtLongtermAndShorttermCombinedAmount", unit: "USD"}
+    - {tag: "DebtAndCapitalLeaseObligations", unit: "USD"}
     - {tag: "StockholdersEquity", unit: "USD"}
     # --- Acciones en circulación ---
     - {tag: "CommonStockSharesOutstanding", unit: "shares"}
@@ -90,7 +102,7 @@ constituents:
   # que cumpla el patrón, vía la API de contenidos de GitHub.
   repo_contents_url: "https://api.github.com/repos/fja05680/sp500/contents"
   file_pattern: "S&P 500 Historical Components & Changes\\((\\d{2}-\\d{2}-\\d{4})\\)\\.csv"
-  # Override opcional: si se indica una URL directa, se usa esa y se omite el descubrimiento.
+  # Override opcional: si se indica una URL directa, se usa esa y se omite la búsqueda del más reciente.
   url: ""
   # Nombre del fichero crudo cacheado bajo data/raw/constituents/
   raw_file: "sp500_historical.csv"
@@ -131,6 +143,69 @@ cache:
   format: "parquet"
   # Días antes de considerar que un fichero de caché está obsoleto
   max_age_days: 7
+
+# -----------------------------------------------------------------------------
+# Métricas derivadas (paso 1.2) — capa point-in-time
+# -----------------------------------------------------------------------------
+# Las cuentas se construyen sobre un panel ANUAL (formularios 10-K). Como una misma
+# magnitud puede reportarse con distintas etiquetas XBRL según la empresa/año, aquí
+# se declara, por cada magnitud canónica, la lista de tags por orden de preferencia:
+# se usa el primero que tenga datos. Las fórmulas (EBITDA, deuda neta, FCF...) viven
+# en el código; los umbrales siguen en `filters`/`valuation`.
+fundamentals:
+  # Prefijo de los formularios considerados anuales (incluye 10-K y 10-K/A)
+  annual_form_prefix: "10-K"
+  # Un 10-K puede incluir datos trimestrales y de portada. Para quedarnos solo con las
+  # cifras anuales: las duraciones (cuenta de resultados, flujos) deben cubrir ~1 año
+  # (rango en días; cubre el año fiscal de 52/53 semanas de muchas empresas), y los
+  # instantes de balance solo se conservan si caen en un cierre de año fiscal.
+  annual_period_days_min: 300
+  annual_period_days_max: 400
+  concept_map:
+    # --- Cuenta de resultados ---
+    revenue:
+      - "Revenues"
+      - "RevenueFromContractWithCustomerExcludingAssessedTax"
+      - "SalesRevenueNet"
+      - "SalesRevenueGoodsNet"
+    cost_of_revenue: ["CostOfRevenue", "CostOfGoodsAndServicesSold"]
+    gross_profit: ["GrossProfit"]
+    operating_income: ["OperatingIncomeLoss"]
+    net_income: ["NetIncomeLoss"]
+    interest_expense: ["InterestExpense"]
+    income_tax: ["IncomeTaxExpenseBenefit"]
+    # --- Flujos de caja ---
+    cfo: ["NetCashProvidedByUsedInOperatingActivities"]
+    capex: ["PaymentsToAcquirePropertyPlantAndEquipment", "PaymentsToAcquireProductiveAssets"]
+    dep_amort:
+      - "DepreciationDepletionAndAmortization"
+      - "DepreciationAndAmortization"
+      - "DepreciationAmortizationAndAccretionNet"
+    # --- Balance ---
+    total_assets: ["Assets"]
+    current_assets: ["AssetsCurrent"]
+    total_liabilities: ["Liabilities"]
+    current_liabilities: ["LiabilitiesCurrent"]
+    cash: ["CashAndCashEquivalentsAtCarryingValue"]
+    short_term_investments: ["ShortTermInvestments"]
+    # Deuda: si hay tramos no corriente + corriente se suman; si no, se usa el total.
+    # Las variantes "...AndCapitalLeaseObligations" cubren sectores intensivos en capital.
+    long_term_debt_noncurrent: ["LongTermDebtNoncurrent", "LongTermDebtAndCapitalLeaseObligations"]
+    current_debt:
+      - "LongTermDebtCurrent"
+      - "DebtCurrent"
+      - "LongTermDebtAndCapitalLeaseObligationsCurrent"
+    long_term_debt_total:
+      - "LongTermDebt"
+      - "DebtLongtermAndShorttermCombinedAmount"
+      - "DebtAndCapitalLeaseObligations"
+    equity: ["StockholdersEquity"]
+    # --- Acciones en circulación ---
+    shares:
+      - "CommonStockSharesOutstanding"
+      - "WeightedAverageNumberOfDilutedSharesOutstanding"
+      - "WeightedAverageNumberOfSharesOutstandingBasic"
+      - "EntityCommonStockSharesOutstanding"
 
 # -----------------------------------------------------------------------------
 # Etapa 2 — Filtros de descarte

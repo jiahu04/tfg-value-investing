@@ -14,8 +14,6 @@ Diseño:
 - El parseo (`parse_companyfacts`) es puro y se prueba con JSON sintético, sin red.
 """
 
-from __future__ import annotations
-
 import pandas as pd
 import requests
 

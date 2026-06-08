@@ -42,7 +42,7 @@ def build_session() -> requests.Session:
 def get_json(
     url: str,
     session: requests.Session,
-    *,
+    *, #Significa que los siguientes parámetros solo pueden pasarse por nombre (keyword-only).
     delay_seconds: float | None = None,
     max_retries: int | None = None,
 ) -> dict | list:

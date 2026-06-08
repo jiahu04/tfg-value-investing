@@ -31,7 +31,7 @@ def _resolve(relative: str) -> Path:
 
 
 def raw_dir() -> Path:
-    """Directorio de datos crudos descargados (`cache.raw_dir`)."""
+    """Directorio de datos raw descargados (`cache.raw_dir`)."""
     return _resolve(get_config("cache.raw_dir", "data/raw"))
 
 

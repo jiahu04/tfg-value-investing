@@ -38,7 +38,7 @@ def parse_company_tickers(data: dict) -> pd.DataFrame:
         {
             "ticker": str(entry["ticker"]).upper(),
             "cik": format_cik(entry["cik_str"]),
-            "title": entry.get("title", ""),
+            "title": entry.get("title", ""), #Se usa entry.get que no da error si falta el título, esto ya que no es imprescindible
         }
         for entry in data.values()
     ]

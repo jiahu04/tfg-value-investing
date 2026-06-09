@@ -7,6 +7,7 @@ de la cartera y del índice, más los registros de operaciones.
 
     python -m src.backtest.run
     python -m src.backtest.run --start 2013-01-01 --end 2025-12-31
+    python -m src.backtest.run --sensitivity   # además, el análisis de sensibilidad
 """
 
 from __future__ import annotations
@@ -17,9 +18,12 @@ from pathlib import Path
 import pandas as pd
 
 from src.backtest.engine import run_backtest
+from src.backtest.metrics import metrics_table
+from src.backtest.sensitivity import run_sensitivity
 from src.ingest import cache_io
 from src.pipeline.point_in_time import load_fundamentals
 from src.pipeline.run import run_pipeline
+from src.reporting.latex import save_latex, to_latex_table
 from src.utils.config_loader import get_config
 
 _PROJECT_ROOT = Path(__file__).resolve().parents[2]
@@ -34,6 +38,9 @@ def main() -> None:
     parser = argparse.ArgumentParser(description="Backtesting de la estrategia value (paso 2.1)")
     parser.add_argument("--start", default=get_config("universe.backtest_start", "2013-01-01"))
     parser.add_argument("--end", default=get_config("universe.backtest_end", "2025-12-31"))
+    parser.add_argument(
+        "--sensitivity", action="store_true", help="Ejecuta también el análisis de sensibilidad"
+    )
     args = parser.parse_args()
 
     cache = cache_io.cache_dir()
@@ -93,7 +100,51 @@ def main() -> None:
     )
     print(f"  indice : {first['index_value']:.0f} -> {last['index_value']:.0f} ({idx_ret:+.1%})")
     print(f"  operaciones: {len(trades)} | puntos de la serie: {len(curve)}")
-    print(f"  series guardadas en: {tables_dir}")
+
+    # Tabla de métricas (Total / Calibración / Validación)
+    metrics = metrics_table(curve, rf_df)
+    cache_io.write_csv(metrics.reset_index(names="metrica"), tables_dir / "backtest_metrics.csv")
+    save_latex(
+        to_latex_table(
+            metrics,
+            caption="Métricas del backtest",
+            label="tab:backtest_metrics",
+            index_header="Métrica",
+        ),
+        tables_dir / "backtest_metrics.tex",
+    )
+    print("\nMétricas:")
+    print(metrics.round(4).to_string())
+
+    # Análisis de sensibilidad (re-ejecuta el backtest por variante)
+    if args.sensitivity:
+
+        def backtest_runner() -> pd.DataFrame:
+            return run_backtest(
+                args.start,
+                args.end,
+                prices_df=prices_df,
+                index_df=index_df,
+                rf_df=rf_df,
+                select_fn=select_fn,
+            )["equity_curve"]
+
+        spec = get_config("backtest.sensitivity", [])
+        sens = run_sensitivity(spec, backtest_runner=backtest_runner, rf_df=rf_df)
+        cache_io.write_csv(sens, tables_dir / "backtest_sensitivity.csv")
+        save_latex(
+            to_latex_table(
+                sens.set_index("parámetro"),
+                caption="Análisis de sensibilidad",
+                label="tab:backtest_sensitivity",
+                index_header="Parámetro",
+            ),
+            tables_dir / "backtest_sensitivity.tex",
+        )
+        print("\nSensibilidad:")
+        print(sens.round(4).to_string(index=False))
+
+    print(f"\nTablas guardadas en: {tables_dir}")
 
 
 if __name__ == "__main__":

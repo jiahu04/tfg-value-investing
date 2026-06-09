@@ -359,6 +359,14 @@ backtest:
   # Remuneración de la liquidez: "risk_free" (tipo a corto) o "zero"
   cash_yield: "risk_free"
 
+  # Días de mercado por año (anualización de Sharpe, tracking error y alpha)
+  trading_days_per_year: 252
+
+  # Análisis de sensibilidad: cada barrido re-ejecuta el backtest variando un umbral.
+  sensitivity:
+    - {param: "portfolio.min_margin_of_safety", values: [0.20, 0.30, 0.40]}
+    - {param: "quality.min_quality_score", values: [0.40, 0.50, 0.60]}
+
 # -----------------------------------------------------------------------------
 # Simulación de aportación (B2)
 # -----------------------------------------------------------------------------

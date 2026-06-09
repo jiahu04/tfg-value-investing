@@ -294,10 +294,15 @@ cartera y del índice y el registro de operaciones:
 ```bash
 python -m src.backtest.run                              # ventana por defecto (config)
 python -m src.backtest.run --start 2013-01-01 --end 2025-12-31
+python -m src.backtest.run --sensitivity                # además, el análisis de sensibilidad
 ```
 
-Guarda `outputs/tables/backtest_equity_curve.csv` y `backtest_trades.csv`. Requiere la caché de ingesta
-(idealmente la **ingesta completa**; con pocas empresas la cartera queda casi siempre en liquidez).
+Genera, en `outputs/tables/`: la serie de valor (`backtest_equity_curve.csv`), las operaciones
+(`backtest_trades.csv`) y la **tabla de métricas** (CAGR, alpha de Jensen, beta, Sharpe, máximo drawdown,
+tracking error) por periodo Total / Calibración / Validación (`backtest_metrics.csv` y `.tex`). Con
+`--sensitivity` añade la **tabla de sensibilidad** (`backtest_sensitivity.csv` y `.tex`). Requiere la caché
+de ingesta (idealmente la **ingesta completa**; con pocas empresas la cartera queda casi siempre en
+liquidez).
 
 ### Resto del pipeline (aún no implementado)
 

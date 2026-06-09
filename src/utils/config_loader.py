@@ -12,6 +12,8 @@ Uso:
     max_pos = get_config("portfolio.max_positions")
 """
 
+from collections.abc import Iterator
+from contextlib import contextmanager
 from functools import lru_cache
 from pathlib import Path
 from typing import Any
@@ -92,3 +94,42 @@ def reload_config(path: str | Path | None = None) -> dict[str, Any]:
     """
     load_config.cache_clear()
     return load_config(path)
+
+
+@contextmanager
+def config_override(overrides: dict[str, Any]) -> Iterator[None]:
+    """Fija temporalmente valores de configuración y los restaura al salir.
+
+    Las claves usan notación de puntos (p. ej. "portfolio.min_margin_of_safety"). Se
+    usa en el análisis de sensibilidad para re-ejecutar el backtest variando un umbral.
+
+    Ejemplo:
+        with config_override({"portfolio.min_margin_of_safety": 0.2}):
+            ...  # get_config devuelve 0.2 aquí dentro
+    """
+    cfg = load_config()
+    sentinel = object()
+    previous: dict[str, Any] = {}
+
+    for key, value in overrides.items():
+        parts = key.split(".")
+        node = cfg
+        for part in parts[:-1]:
+            node = node.setdefault(part, {})
+        leaf = parts[-1]
+        previous[key] = node.get(leaf, sentinel)
+        node[leaf] = value
+
+    try:
+        yield
+    finally:
+        for key, old in previous.items():
+            parts = key.split(".")
+            node = cfg
+            for part in parts[:-1]:
+                node = node[part]
+            leaf = parts[-1]
+            if old is sentinel:
+                node.pop(leaf, None)
+            else:
+                node[leaf] = old

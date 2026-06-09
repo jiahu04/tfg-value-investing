@@ -304,10 +304,27 @@ tracking error) por periodo Total / Calibración / Validación (`backtest_metric
 de ingesta (idealmente la **ingesta completa**; con pocas empresas la cartera queda casi siempre en
 liquidez).
 
+### Simulación de estrategias de aportación (Fase 2)
+
+Compara tres formas de aportar dinero nuevo a la estrategia value (sección 8.3): **DCA fijo** (aportación
+constante), **DCA condicional al valor intrínseco** (la aportación sube al ampliarse el margen de seguridad
+y baja o se suspende al estrecharse) y **aportación concentrada** en el máximo descuento. Las aportaciones
+entran en un NAV construido a partir de la curva de valor del backtest:
+
+```bash
+python -m src.contributions.run                          # ventana por defecto (config)
+python -m src.contributions.run --start 2013-01-01 --end 2025-12-31
+```
+
+Genera, en `outputs/tables/`, la **tabla comparativa** (`contributions_comparison.csv` y `.tex`) con la
+rentabilidad ponderada por el dinero (**TIR/MWR**), el valor final, el total aportado, el número de
+aportaciones y el **precio medio de adquisición** por estrategia. Los umbrales viven en
+`config/config.yaml` (sección `contributions`). Resultados representativos requieren la **ingesta completa**.
+
 ### Resto del pipeline (aún no implementado)
 
 ```bash
-python -m src.contributions.run   # estrategias de aportación (pendiente, paso 2.3)
+python -m src.reporting.figures   # gráficas de resultados (pendiente, paso 3.1)
 ```
 
 Los resultados (tablas LaTeX y gráficas) se generarán en `outputs/`.

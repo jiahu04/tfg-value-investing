@@ -271,12 +271,25 @@ data/cache/risk_free.parquet               # ^IRX
 
 > **Nota (yfinance):** si la descarga de precios falla con `database is locked`, es la caché interna de yfinance; reintenta `--step prices --force`.
 
+### Pipeline de selección (Etapas 1–5, Fase 1 completa)
+
+Una sola orden ejecuta las cinco etapas (datos → filtros → calidad → valoración → margen de seguridad)
+sobre una fecha y devuelve la **lista priorizada** point-in-time:
+
+```bash
+python -m src.pipeline.run --date 2019-06-01   # lista priorizada a esa fecha
+python -m src.pipeline.run                      # fecha por defecto: hoy
+python -m src.pipeline.run --date 2019-06-01 --limit 50   # acota el universo (prueba rápida)
+```
+
+Imprime el resumen (universo, supervivientes, seleccionadas) y la lista priorizada, y guarda la tabla
+completa de candidatos en `outputs/tables/seleccion_<fecha>.csv`. Requiere la caché del paso de ingesta.
+
 ### Resto del pipeline (aún no implementado)
 
 ```bash
-python -m src.pipeline.run        # Etapas 2–5: lista priorizada (pendiente)
-python -m src.backtest.run        # backtesting 2013–2025 (pendiente)
-python -m src.contributions.run   # estrategias de aportación (pendiente)
+python -m src.backtest.run        # backtesting 2013–2025 (pendiente, Fase 2)
+python -m src.contributions.run   # estrategias de aportación (pendiente, Fase 2)
 ```
 
 Los resultados (tablas LaTeX y gráficas) se generarán en `outputs/`.

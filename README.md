@@ -285,11 +285,24 @@ python -m src.pipeline.run --date 2019-06-01 --limit 50   # acota el universo (p
 Imprime el resumen (universo, supervivientes, seleccionadas) y la lista priorizada, y guarda la tabla
 completa de candidatos en `outputs/tables/seleccion_<fecha>.csv`. Requiere la caché del paso de ingesta.
 
+### Backtesting (Fase 2)
+
+Simula la estrategia en el pasado sin información futura (revisión anual + vigilancia semanal de ventas
+por convergencia, cartera equiponderada con liquidez remunerada y costes). Produce la serie de valor de la
+cartera y del índice y el registro de operaciones:
+
+```bash
+python -m src.backtest.run                              # ventana por defecto (config)
+python -m src.backtest.run --start 2013-01-01 --end 2025-12-31
+```
+
+Guarda `outputs/tables/backtest_equity_curve.csv` y `backtest_trades.csv`. Requiere la caché de ingesta
+(idealmente la **ingesta completa**; con pocas empresas la cartera queda casi siempre en liquidez).
+
 ### Resto del pipeline (aún no implementado)
 
 ```bash
-python -m src.backtest.run        # backtesting 2013–2025 (pendiente, Fase 2)
-python -m src.contributions.run   # estrategias de aportación (pendiente, Fase 2)
+python -m src.contributions.run   # estrategias de aportación (pendiente, paso 2.3)
 ```
 
 Los resultados (tablas LaTeX y gráficas) se generarán en `outputs/`.

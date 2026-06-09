@@ -332,12 +332,17 @@ portfolio:
 # Backtest (B1)
 # -----------------------------------------------------------------------------
 backtest:
+  # Capital inicial de la cartera simulada
+  initial_capital: 100000.0
   # Periodo de calibración / validación
   calibration_end: "2018-12-31"
   validation_start: "2019-01-01"
-  
+
   # Revisión de fundamentales: con cada nuevo 10-K (anual)
   fundamentals_review: "annual"
+  # Mes (1-12) en que se hace la revisión anual; junio asegura que los 10-K del año
+  # fiscal anterior ya estén publicados para la mayoría de empresas.
+  review_month: 6
   
   # Vigilancia de ventas: semanal
   sell_monitoring: "weekly"

@@ -136,6 +136,58 @@ def test_capex_fallback_tag_feeds_fcf():
     assert _last(metrics.free_cash_flow(panel)) == 210.0
 
 
+def test_net_income_fallback_to_profit_loss():
+    # Sin NetIncomeLoss: usa ProfitLoss (incluye minoritarios) como respaldo
+    panel = pd.DataFrame(
+        {"ProfitLoss": [175.0]},
+        index=pd.to_datetime(["2020-12-31"]),
+    )
+    assert _last(metrics._resolve(panel, "net_income")) == 175.0
+
+
+def test_net_income_prefers_net_income_loss_over_profit_loss():
+    # Con ambos presentes, gana el preferente (beneficio atribuible a la matriz)
+    panel = pd.DataFrame(
+        {"NetIncomeLoss": [150.0], "ProfitLoss": [175.0]},
+        index=pd.to_datetime(["2020-12-31"]),
+    )
+    assert _last(metrics._resolve(panel, "net_income")) == 150.0
+
+
+def test_revenue_fallback_including_assessed_tax():
+    # Sin los preferentes: usa la variante RevenueFromContract...IncludingAssessedTax
+    panel = pd.DataFrame(
+        {"RevenueFromContractWithCustomerIncludingAssessedTax": [800.0]},
+        index=pd.to_datetime(["2020-12-31"]),
+    )
+    assert _last(metrics._resolve(panel, "revenue")) == 800.0
+
+
+def test_cfo_fallback_continuing_operations_feeds_fcf():
+    # Sin el CFO principal: usa la variante ...ContinuingOperations (y alimenta el FCF)
+    panel = pd.DataFrame(
+        {
+            "NetCashProvidedByUsedInOperatingActivitiesContinuingOperations": [300.0],
+            "PaymentsToAcquirePropertyPlantAndEquipment": [70.0],
+        },
+        index=pd.to_datetime(["2020-12-31"]),
+    )
+    assert _last(metrics._resolve(panel, "cfo")) == 300.0
+    assert _last(metrics.free_cash_flow(panel)) == 230.0  # 300 - 70
+
+
+def test_capex_fallback_other_productive_assets_feeds_fcf():
+    # Sin los capex preferentes: usa PaymentsToAcquireOtherProductiveAssets
+    panel = pd.DataFrame(
+        {
+            "NetCashProvidedByUsedInOperatingActivities": [300.0],
+            "PaymentsToAcquireOtherProductiveAssets": [85.0],
+        },
+        index=pd.to_datetime(["2020-12-31"]),
+    )
+    assert _last(metrics.free_cash_flow(panel)) == 215.0  # 300 - 85
+
+
 def test_total_debt_from_capital_lease_tranches():
     # Tramos con obligaciones de leasing (aerolíneas/industriales)
     panel = pd.DataFrame(

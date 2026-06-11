@@ -29,6 +29,7 @@ sec:
     # a 2018 conviven con Revenues y la nueva RevenueFromContract...).
     - {tag: "Revenues", unit: "USD"}
     - {tag: "RevenueFromContractWithCustomerExcludingAssessedTax", unit: "USD"}
+    - {tag: "RevenueFromContractWithCustomerIncludingAssessedTax", unit: "USD"}
     - {tag: "SalesRevenueNet", unit: "USD"}
     - {tag: "SalesRevenueGoodsNet", unit: "USD"}
     - {tag: "CostOfRevenue", unit: "USD"}
@@ -36,13 +37,18 @@ sec:
     - {tag: "GrossProfit", unit: "USD"}
     - {tag: "OperatingIncomeLoss", unit: "USD"}
     - {tag: "NetIncomeLoss", unit: "USD"}
+    # Respaldo de beneficio: ProfitLoss incluye minoritarios (se usa solo si falta NetIncomeLoss).
+    - {tag: "ProfitLoss", unit: "USD"}
     - {tag: "InterestExpense", unit: "USD"}
     - {tag: "IncomeTaxExpenseBenefit", unit: "USD"}
     # --- Flujos de caja ---
     # capex y D&A: variantes según sector (industriales/aerolíneas usan tags propios).
     - {tag: "NetCashProvidedByUsedInOperatingActivities", unit: "USD"}
+    - {tag: "NetCashProvidedByUsedInOperatingActivitiesContinuingOperations", unit: "USD"}
     - {tag: "PaymentsToAcquirePropertyPlantAndEquipment", unit: "USD"}
     - {tag: "PaymentsToAcquireProductiveAssets", unit: "USD"}
+    - {tag: "PaymentsToAcquireOtherPropertyPlantAndEquipment", unit: "USD"}
+    - {tag: "PaymentsToAcquireOtherProductiveAssets", unit: "USD"}
     - {tag: "DepreciationDepletionAndAmortization", unit: "USD"}
     - {tag: "DepreciationAndAmortization", unit: "USD"}
     - {tag: "DepreciationAmortizationAndAccretionNet", unit: "USD"}
@@ -166,17 +172,25 @@ fundamentals:
     revenue:
       - "Revenues"
       - "RevenueFromContractWithCustomerExcludingAssessedTax"
+      - "RevenueFromContractWithCustomerIncludingAssessedTax"
       - "SalesRevenueNet"
       - "SalesRevenueGoodsNet"
     cost_of_revenue: ["CostOfRevenue", "CostOfGoodsAndServicesSold"]
     gross_profit: ["GrossProfit"]
     operating_income: ["OperatingIncomeLoss"]
-    net_income: ["NetIncomeLoss"]
+    # Respaldo: ProfitLoss (incluye minoritarios) cuando falta el atribuible a la matriz.
+    net_income: ["NetIncomeLoss", "ProfitLoss"]
     interest_expense: ["InterestExpense"]
     income_tax: ["IncomeTaxExpenseBenefit"]
     # --- Flujos de caja ---
-    cfo: ["NetCashProvidedByUsedInOperatingActivities"]
-    capex: ["PaymentsToAcquirePropertyPlantAndEquipment", "PaymentsToAcquireProductiveAssets"]
+    cfo:
+      - "NetCashProvidedByUsedInOperatingActivities"
+      - "NetCashProvidedByUsedInOperatingActivitiesContinuingOperations"
+    capex:
+      - "PaymentsToAcquirePropertyPlantAndEquipment"
+      - "PaymentsToAcquireProductiveAssets"
+      - "PaymentsToAcquireOtherPropertyPlantAndEquipment"
+      - "PaymentsToAcquireOtherProductiveAssets"
     dep_amort:
       - "DepreciationDepletionAndAmortization"
       - "DepreciationAndAmortization"

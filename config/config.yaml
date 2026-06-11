@@ -18,7 +18,7 @@ sec:
   tickers_url: "https://www.sec.gov/files/company_tickers.json"
   # Pausa entre peticiones para respetar el rate limit de la SEC (10 req/s)
   request_delay_seconds: 0.15
-  # Número máximo de reintentos ante errores 429/503
+  # Número máximo de reintentos ante errores 429/503 y cortes de conexión transitorios
   max_retries: 3
   # Conceptos XBRL que se extraen de companyfacts (lista curada; se ignora el resto).
   # Cada entrada: tag (etiqueta XBRL), unit (unidad a leer) y taxonomy (us-gaap por defecto, dei para algunos).

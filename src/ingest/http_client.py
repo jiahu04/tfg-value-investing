@@ -4,7 +4,8 @@ http_client.py — Cliente HTTP para las peticiones a la SEC.
 La SEC exige identificar las peticiones con un User-Agent que incluya un correo de
 contacto y limita el ritmo a unas 10 peticiones por segundo. Este módulo encapsula
 esas reglas: una sesión reutilizable con el User-Agent correcto, una pausa
-configurable entre peticiones y reintentos ante errores transitorios (429/503).
+configurable entre peticiones y reintentos ante errores transitorios (429/503 y
+cortes de conexión).
 
 No se ejecuta red en las pruebas: los módulos que usan este cliente reciben sus
 funciones de descarga por inyección o se *mockean* (ver tests).
@@ -20,6 +21,15 @@ from src.utils.config_loader import get_config
 
 # Errores HTTP que justifican un reintento (rate limit / servicio no disponible)
 _RETRIABLE_STATUS = {429, 503}
+
+# Excepciones de red transitorias que también justifican un reintento: cortes de
+# conexión (ConnectionError), timeouts y respuestas troceadas interrumpidas
+# (ChunkedEncodingError). La SEC corta la conexión esporádicamente en descargas largas.
+_RETRIABLE_EXCEPTIONS = (
+    requests.ConnectionError,
+    requests.Timeout,
+    requests.exceptions.ChunkedEncodingError,
+)
 
 
 def build_session() -> requests.Session:
@@ -42,28 +52,31 @@ def build_session() -> requests.Session:
 def get_json(
     url: str,
     session: requests.Session,
-    *, #Significa que los siguientes parámetros solo pueden pasarse por nombre (keyword-only).
+    *,  # Significa que los siguientes parámetros solo pueden pasarse por nombre (keyword-only).
     delay_seconds: float | None = None,
     max_retries: int | None = None,
 ) -> dict | list:
     """Descarga una URL y devuelve su contenido JSON, respetando el rate limit.
 
     Aplica una pausa antes de cada intento (para no superar el límite de la SEC) y
-    reintenta ante errores 429/503 con espera creciente.
+    reintenta con espera creciente ante errores 429/503 y ante cortes de conexión
+    transitorios (ConnectionError/Timeout/ChunkedEncodingError).
 
     Args:
         url: URL a descargar.
         session: Sesión `requests` (de `build_session`).
         delay_seconds: Pausa entre peticiones. Si es None, usa
             `sec.request_delay_seconds`.
-        max_retries: Reintentos ante 429/503. Si es None, usa `sec.max_retries`.
+        max_retries: Reintentos ante 429/503 y cortes de conexión. Si es None, usa
+            `sec.max_retries`.
 
     Returns:
         El cuerpo de la respuesta deserializado (dict o list).
 
     Raises:
         requests.HTTPError: Si la respuesta es un error no recuperable o se agotan
-            los reintentos.
+            los reintentos por 429/503.
+        requests.RequestException: Si se agotan los reintentos por un corte de conexión.
     """
     if delay_seconds is None:
         delay_seconds = get_config("sec.request_delay_seconds", 0.15)
@@ -73,7 +86,15 @@ def get_json(
     last_error: Exception | None = None
     for attempt in range(max_retries + 1):
         time.sleep(delay_seconds)
-        response = session.get(url, timeout=30)
+        try:
+            response = session.get(url, timeout=30)
+        except _RETRIABLE_EXCEPTIONS as exc:
+            # Corte de conexión transitorio: reintentar si quedan intentos; si no, propagar.
+            last_error = exc
+            if attempt < max_retries:
+                time.sleep(delay_seconds * (attempt + 1))
+                continue
+            raise
         if response.status_code in _RETRIABLE_STATUS and attempt < max_retries:
             # Espera creciente antes de reintentar (back-off lineal sencillo).
             time.sleep(delay_seconds * (attempt + 1))

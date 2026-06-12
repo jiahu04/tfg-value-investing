@@ -397,19 +397,24 @@ contributions:
   # Frecuencia de aportación
   frequency: "monthly"
   
-  # DCA condicional: factor de escala según el margen de seguridad
-  # aportación = periodic_amount * scale_factor(margin_of_safety)
+  # Señal que gobierna las estrategias: AMPLITUD de oportunidades = fracción del conjunto
+  # que pasa filtros con margen de seguridad >= portfolio.min_margin_of_safety (en [0,1]).
+  # Varía en el tiempo (más alta en mercados baratos). Umbrales calibrados a su rango
+  # operativo observado (~0,19-0,39), para que el mecanismo no sature — NO para maximizar
+  # la rentabilidad.
+  # DCA condicional: factor de escala según la amplitud
+  # aportación = periodic_amount * scale_factor(amplitud)
   conditional_dca:
-    # Margen a partir del cual la aportación empieza a escalar
-    base_margin: 0.30
-    # Margen al que se suspende la aportación (muy poco descuento)
-    suspend_below_margin: 0.05
+    # Amplitud a la que la aportación vale 1×
+    base: 0.25
+    # Amplitud por debajo de la cual se suspende la aportación (muy pocas oportunidades)
+    suspend_below: 0.10
     # Máximo multiplicador de la aportación
     max_scale_factor: 2.0
-  
-  # Aportación concentrada: umbral de descuento para concentrar
+
+  # Aportación concentrada: umbral de amplitud para concentrar
   concentrated:
-    min_margin: 0.45             # 45% de descuento mínimo para activar
+    min: 0.35                    # solo dispara cuando abundan las oportunidades
     multiplier: 3.0              # 3× la aportación base
 
 # -----------------------------------------------------------------------------

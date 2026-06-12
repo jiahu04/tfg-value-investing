@@ -9,19 +9,20 @@ from src.reporting.latex import save_latex, to_latex_table
 
 _CFG = {
     "periodic_amount": 1000.0,
-    "conditional_dca": {"base_margin": 0.30, "suspend_below_margin": 0.05, "max_scale_factor": 2.0},
-    "concentrated": {"min_margin": 0.45, "multiplier": 3.0},
+    "conditional_dca": {"base": 0.25, "suspend_below": 0.10, "max_scale_factor": 2.0},
+    "concentrated": {"min": 0.35, "multiplier": 3.0},
 }
 
 
 def _fake_selection(asof: pd.Timestamp) -> pd.DataFrame:
-    """Selección sintética: dos empresas seleccionadas con margen conocido (media 0.40)."""
+    """Selección sintética: 3 empresas que pasan filtros, 2 con margen >= 0.30 (amplitud 2/3)."""
     return pd.DataFrame(
         {
-            "ticker": ["AAA", "BBB"],
-            "margin_of_safety": [0.30, 0.50],
-            "selected": [True, True],
-            "passed": [True, True],
+            "ticker": ["AAA", "BBB", "CCC"],
+            "margin_of_safety": [0.10, 0.30, 0.50],
+            "value_central": [50.0, 60.0, 70.0],
+            "selected": [False, True, True],
+            "passed": [True, True, True],
         }
     )
 
@@ -45,12 +46,12 @@ def test_contribution_dates_monthly():
     assert dates[0] == index[0]
 
 
-def test_margin_signal_forward_filled():
+def test_opportunity_signal_forward_filled():
     index = pd.bdate_range("2020-01-01", "2021-12-31")
-    signal = run.margin_signal(_fake_selection, index, review_month=6)
+    signal = run.opportunity_signal(_fake_selection, index, review_month=6)
     assert signal.index.equals(index)
-    # La media de la selección sintética es 0.40 y se propaga desde la primera revisión.
-    assert signal.iloc[0] == pytest.approx(0.40)
+    # Amplitud = fracción de las que pasan con margen >= 0.30 = 2/3, propagada desde la 1ª revisión.
+    assert signal.iloc[0] == pytest.approx(2 / 3)
     assert signal.notna().all()
 
 
@@ -59,14 +60,14 @@ def test_end_to_end_table_and_latex(tmp_path):
     nav = pd.Series(
         [100.0 * (1.0 + 0.0002 * i) for i in range(len(index))], index=index
     )  # NAV suavemente creciente
-    signal = run.margin_signal(_fake_selection, index, review_month=6)
+    signal = run.opportunity_signal(_fake_selection, index, review_month=6)
     dates = run.contribution_dates(index, "monthly")
 
     table = compare_strategies(nav, signal, dates, cfg=_CFG)
     assert list(table.index) == ["DCA fijo", "DCA condicional", "Concentrada"]
-    # El DCA fijo aporta todos los meses; la concentrada no dispara (margen 0.40 < 0.45).
+    # Señal 2/3 (>=0.35) constante: fijo y concentrada aportan todos los meses (plumbing).
     assert table.loc["DCA fijo", "n_aportaciones"] == len(dates)
-    assert table.loc["Concentrada", "n_aportaciones"] == 0
+    assert table.loc["Concentrada", "n_aportaciones"] == len(dates)
 
     out = save_latex(
         to_latex_table(table, caption="Aportación", label="tab:c", index_header="Estrategia"),

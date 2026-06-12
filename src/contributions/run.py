@@ -44,40 +44,47 @@ def build_nav(equity_curve: pd.DataFrame) -> pd.Series:
     return curve / base * 100.0 if base else curve
 
 
-def margin_signal(
+def opportunity_signal(
     select_fn,
     nav_index: pd.DatetimeIndex,
     review_month: int,
 ) -> pd.Series:
-    """Serie de margen de seguridad agregado, point-in-time, sobre el calendario del NAV.
+    """Serie de la señal de oportunidad (amplitud), point-in-time, sobre el calendario del NAV.
 
-    En cada fecha de revisión anual se llama al pipeline y se toma la media del margen de
-    seguridad de las empresas seleccionadas (si no hay selección, de las que pasan los
-    filtros; si tampoco, NaN). El valor se mantiene (forward-fill) hasta la siguiente
-    revisión.
+    En cada fecha de revisión anual se llama al pipeline y se calcula la **amplitud de
+    oportunidades** (fracción del conjunto que pasa filtros con margen de seguridad por
+    encima del umbral). El valor se mantiene (forward-fill) hasta la siguiente revisión.
     """
     review_dates, _ = _decision_dates(nav_index, review_month)
     values: dict[pd.Timestamp, float] = {}
     for date in sorted(review_dates):
         candidates = select_fn(date)
-        values[date] = _aggregate_margin(candidates)
+        values[date] = _opportunity_breadth(candidates)
     signal = pd.Series(values).sort_index()
     return signal.reindex(nav_index.union(signal.index)).ffill().reindex(nav_index)
 
 
-def _aggregate_margin(candidates: pd.DataFrame) -> float:
-    """Margen de seguridad agregado de una selección (media; selected -> passed -> NaN)."""
+def _opportunity_breadth(candidates: pd.DataFrame) -> float:
+    """Amplitud de oportunidades: fracción de las empresas que pasan filtros (con margen
+    válido) cuyo `margin_of_safety` alcanza `portfolio.min_margin_of_safety`.
+
+    Es una señal en [0, 1] que **varía** con el mercado (alta cuando abundan las empresas
+    baratas, baja cuando escasean). NaN si no hay base sobre la que medir.
+    """
     if candidates is None or candidates.empty or "margin_of_safety" not in candidates.columns:
         return float("nan")
-    if "selected" in candidates.columns:
-        selected = candidates[candidates["selected"].astype(bool)]
-        if not selected.empty and selected["margin_of_safety"].notna().any():
-            return float(selected["margin_of_safety"].mean())
-    if "passed" in candidates.columns:
-        passed = candidates[candidates["passed"].fillna(False).astype(bool)]
-        if not passed.empty and passed["margin_of_safety"].notna().any():
-            return float(passed["margin_of_safety"].mean())
-    return float("nan")
+    if "passed" not in candidates.columns or "value_central" not in candidates.columns:
+        return float("nan")
+    investable = candidates[
+        candidates["passed"].fillna(False).astype(bool)
+        & (candidates["value_central"] > 0)
+        & candidates["margin_of_safety"].notna()
+    ]
+    if investable.empty:
+        return float("nan")
+    min_margin = get_config("portfolio.min_margin_of_safety", 0.30)
+    eligible = (investable["margin_of_safety"] >= min_margin).sum()
+    return float(eligible / len(investable))
 
 
 def contribution_dates(nav_index: pd.DatetimeIndex, frequency: str) -> pd.DatetimeIndex:
@@ -147,7 +154,7 @@ def main() -> None:
     nav = build_nav(curve)
     review_month = get_config("backtest.review_month", 6)
     frequency = get_config("contributions.frequency", "monthly")
-    signal = margin_signal(select_fn, nav.index, review_month)
+    signal = opportunity_signal(select_fn, nav.index, review_month)
     dates = contribution_dates(nav.index, frequency)
 
     cfg = get_config("contributions", {})

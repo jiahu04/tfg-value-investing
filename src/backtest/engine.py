@@ -205,6 +205,7 @@ def run_backtest(
     last_selection: pd.DataFrame | None = None
     holdings_rows: list[dict] = []
     curve_rows: list[dict] = []
+    review_rows: list[dict] = []
 
     def price_of(ticker: str) -> float:
         """Precio ajustado vigente (operaciones y valor de la cartera)."""
@@ -234,6 +235,7 @@ def run_backtest(
         # 2) Decisiones
         if current_date in review_dates:
             last_selection = _annual_review(pf, current_date, select_fn, price_of)
+            _record_review(review_rows, current_date, last_selection)
             _snapshot_holdings(holdings_rows, pf, current_date, price_of)
         elif current_date in weekly_dates:
             _weekly_monitor(
@@ -275,6 +277,7 @@ def run_backtest(
             columns=["date", "ticker", "action", "shares", "price", "notional", "cost", "reason"],
         ),
         "holdings": pd.DataFrame(holdings_rows, columns=["date", "ticker", "shares", "weight"]),
+        "reviews": pd.DataFrame(review_rows, columns=["date", "margin_of_safety", "n_selected"]),
     }
 
 
@@ -356,6 +359,24 @@ def _weekly_monitor(
         pf.buy_value(date, ticker, slot, price_exec, "redespliegue")
         if ticker in pf.positions:
             pf.ref_value[ticker] = value
+
+
+def _record_review(review_rows, date, candidates):
+    """Registra, en cada revisión, el margen de seguridad medio de las seleccionadas.
+
+    Sirve para la figura de "evolución del margen de seguridad" (paso 3.1). Margen NaN si
+    no hay selección a esa fecha.
+    """
+    if candidates is None or candidates.empty or "selected" not in candidates.columns:
+        review_rows.append({"date": date, "margin_of_safety": float("nan"), "n_selected": 0})
+        return
+    selected = candidates[candidates["selected"].astype(bool)]
+    margin = (
+        float(selected["margin_of_safety"].mean())
+        if not selected.empty and "margin_of_safety" in selected.columns
+        else float("nan")
+    )
+    review_rows.append({"date": date, "margin_of_safety": margin, "n_selected": len(selected)})
 
 
 def _snapshot_holdings(holdings_rows, pf, date, price_of):

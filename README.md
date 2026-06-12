@@ -321,13 +321,22 @@ rentabilidad ponderada por el dinero (**TIR/MWR**), el valor final, el total apo
 aportaciones y el **precio medio de adquisición** por estrategia. Los umbrales viven en
 `config/config.yaml` (sección `contributions`). Resultados representativos requieren la **ingesta completa**.
 
-### Resto del pipeline (aún no implementado)
+### Gráficas de resultados (Fase 3)
+
+Genera las figuras del capítulo de resultados a partir de los CSV ya producidos (backtest y aportación):
+curva de capital cartera vs índice (con el corte calibración/validación), evolución del margen de seguridad
+y comparación de estrategias de aportación.
 
 ```bash
-python -m src.reporting.figures   # gráficas de resultados (pendiente, paso 3.1)
+python -m src.reporting.figures
 ```
 
-Los resultados (tablas LaTeX y gráficas) se generarán en `outputs/`.
+Deja en `outputs/figures/` cada figura en **PDF** (vectorial, para LaTeX) y **PNG** (para verla al vuelo):
+`equity_curve`, `margin_evolution`, `contributions`. Lee los CSV de `outputs/tables/`; si falta alguno
+(p. ej. no se ha corrido el backtest), avisa y omite esa figura. La evolución del margen requiere
+`backtest_reviews.csv`, que produce `src.backtest.run`.
+
+Los resultados (tablas LaTeX y gráficas) quedan en `outputs/`.
 
 Para forzar una descarga limpia de datos:
 ```bash

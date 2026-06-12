@@ -83,6 +83,7 @@ def main() -> None:
     cache_io.ensure_dir(tables_dir)
     cache_io.write_csv(curve, tables_dir / "backtest_equity_curve.csv")
     cache_io.write_csv(trades, tables_dir / "backtest_trades.csv")
+    cache_io.write_csv(result["reviews"], tables_dir / "backtest_reviews.csv")
 
     print(f"Backtest {args.start} -> {args.end}")
     if curve.empty:

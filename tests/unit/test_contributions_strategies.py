@@ -6,15 +6,15 @@ import pytest
 
 from src.contributions import strategies
 
-# Config de aportación de referencia para los tests (no depende del fichero real).
+# Config de aportación de referencia para los tests (señal = amplitud de oportunidades).
 _CFG = {
     "periodic_amount": 1000.0,
     "conditional_dca": {
-        "base_margin": 0.30,
-        "suspend_below_margin": 0.05,
+        "base": 0.25,
+        "suspend_below": 0.10,
         "max_scale_factor": 2.0,
     },
-    "concentrated": {"min_margin": 0.45, "multiplier": 3.0},
+    "concentrated": {"min": 0.35, "multiplier": 3.0},
 }
 
 
@@ -41,34 +41,34 @@ def test_mwr_returns_nan_without_cashflows():
     assert np.isnan(strategies.money_weighted_return([], 1000.0, pd.Timestamp("2022-01-01")))
 
 
-# --- Factor de escala del DCA condicional ----------------------------------------
+# --- Factor de escala del DCA condicional (señal = amplitud) ----------------------
 def test_scale_factor_suspends_below_threshold():
     assert (
         strategies.scale_factor_conditional(
-            0.02, base_margin=0.30, suspend_below_margin=0.05, max_scale_factor=2.0
+            0.05, base=0.25, suspend_below=0.10, max_scale_factor=2.0
         )
         == 0.0
     )
 
 
-def test_scale_factor_is_one_at_base_margin():
+def test_scale_factor_is_one_at_base():
     assert strategies.scale_factor_conditional(
-        0.30, base_margin=0.30, suspend_below_margin=0.05, max_scale_factor=2.0
+        0.25, base=0.25, suspend_below=0.10, max_scale_factor=2.0
     ) == pytest.approx(1.0)
 
 
 def test_scale_factor_capped_at_max():
     assert strategies.scale_factor_conditional(
-        0.90, base_margin=0.30, suspend_below_margin=0.05, max_scale_factor=2.0
-    ) == pytest.approx(2.0)
+        0.90, base=0.25, suspend_below=0.10, max_scale_factor=2.0
+    ) == pytest.approx(2.0)  # 0.90/0.25 = 3.6 -> tope 2.0
 
 
 def test_scale_factor_monotonic_and_nan():
     f = strategies.scale_factor_conditional
-    low = f(0.20, base_margin=0.30, suspend_below_margin=0.05, max_scale_factor=2.0)
-    high = f(0.40, base_margin=0.30, suspend_below_margin=0.05, max_scale_factor=2.0)
+    low = f(0.20, base=0.25, suspend_below=0.10, max_scale_factor=2.0)
+    high = f(0.40, base=0.25, suspend_below=0.10, max_scale_factor=2.0)
     assert low < high
-    assert f(np.nan, base_margin=0.30, suspend_below_margin=0.05, max_scale_factor=2.0) == 0.0
+    assert f(np.nan, base=0.25, suspend_below=0.10, max_scale_factor=2.0) == 0.0
 
 
 # --- Importe por estrategia ------------------------------------------------------
@@ -79,16 +79,16 @@ def test_amount_dca_fijo_is_constant():
 
 def test_amount_conditional_suspends_and_scales():
     amt = strategies.contribution_amount
-    assert amt("dca_condicional", 0.30, 1000.0, _CFG) == pytest.approx(1000.0)
-    assert amt("dca_condicional", 0.02, 1000.0, _CFG) == 0.0  # suspendida
+    assert amt("dca_condicional", 0.25, 1000.0, _CFG) == pytest.approx(1000.0)  # 1× en base
+    assert amt("dca_condicional", 0.05, 1000.0, _CFG) == 0.0  # suspendida (<0.10)
     assert amt("dca_condicional", np.nan, 1000.0, _CFG) == 1000.0  # sin señal -> base
-    assert amt("dca_condicional", 0.60, 1000.0, _CFG) == pytest.approx(2000.0)  # tope
+    assert amt("dca_condicional", 0.60, 1000.0, _CFG) == pytest.approx(2000.0)  # 0.60/0.25 -> tope
 
 
-def test_amount_concentrated_only_at_deep_discount():
+def test_amount_concentrated_only_when_opportunities_abundant():
     amt = strategies.contribution_amount
-    assert amt("concentrada", 0.50, 1000.0, _CFG) == pytest.approx(3000.0)
-    assert amt("concentrada", 0.30, 1000.0, _CFG) == 0.0
+    assert amt("concentrada", 0.50, 1000.0, _CFG) == pytest.approx(3000.0)  # >=0.35 -> dispara
+    assert amt("concentrada", 0.30, 1000.0, _CFG) == 0.0  # <0.35 -> no
     assert amt("concentrada", np.nan, 1000.0, _CFG) == 0.0
 
 
@@ -136,3 +136,18 @@ def test_compare_strategies_table_shape():
     assert {"TIR (MWR)", "valor_final", "total_aportado", "n_aportaciones", "precio_medio"} <= set(
         table.columns
     )
+
+
+def test_strategies_differentiate_with_varying_signal():
+    # Regresión de C-006: con una señal que VARÍA, las tres estrategias deben dar
+    # TIR y precio medio DISTINTOS (antes salían idénticas porque la señal saturaba).
+    # Fechas anuales (span suficiente para que la TIR anualizada quede en rango).
+    dates = pd.to_datetime(["2018-01-01", "2019-01-01", "2020-01-01", "2021-01-01"])
+    nav = pd.Series([100.0, 80.0, 130.0, 150.0], index=dates)
+    signal = pd.Series([0.05, 0.50, 0.20, 0.40], index=dates)  # amplitud variable
+    table = strategies.compare_strategies(nav, signal, dates, cfg=_CFG)
+    assert table["TIR (MWR)"].nunique() == 3
+    assert table["precio_medio"].nunique() == 3
+    # El nº de aportaciones también difiere (fijo todas; concentrada solo cuando >=0.35).
+    assert table.loc["DCA fijo", "n_aportaciones"] == 4
+    assert table.loc["Concentrada", "n_aportaciones"] == 2  # señal >=0.35 en 2 fechas

@@ -27,13 +27,26 @@ _BETA_MIN_PERIODS = 30
 # ---------------------------------------------------------------------------
 # Acceso a datos de mercado (point-in-time)
 # ---------------------------------------------------------------------------
-def price_asof(prices_df: pd.DataFrame, ticker: str, asof: str | pd.Timestamp) -> float:
-    """Último precio de cierre con fecha ≤ asof. NaN si no hay."""
+def price_asof(
+    prices_df: pd.DataFrame,
+    ticker: str,
+    asof: str | pd.Timestamp,
+    *,
+    field: str = "close_unadj",
+) -> float:
+    """Último precio de cierre con fecha ≤ asof. NaN si no hay.
+
+    Por defecto usa el precio **sin ajustar** (`close_unadj`, precio real de mercado),
+    para que sea comparable con el valor intrínseco por acción (que se calcula con el
+    número de acciones del periodo, también sin ajustar). Si la columna no existe
+    (cachés antiguas), cae a `close`. La beta, en cambio, usa `close` (ajustado).
+    """
     asof = pd.Timestamp(asof)
+    col = field if field in prices_df.columns else "close"
     sub = prices_df[(prices_df["ticker"] == ticker.upper()) & (prices_df["date"] <= asof)]
     if sub.empty:
         return np.nan
-    return float(sub.sort_values("date")["close"].iloc[-1])
+    return float(sub.sort_values("date")[col].iloc[-1])
 
 
 def risk_free_asof(rf_df: pd.DataFrame, asof: str | pd.Timestamp) -> float:

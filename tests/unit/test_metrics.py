@@ -222,6 +222,38 @@ def test_ebit_fallback_when_no_operating_income():
     assert _last(metrics.ebit(panel)) == 150.0
 
 
+def test_shares_outstanding_normalizes_scale():
+    # Miles (189.461 -> 1,89e8), millones (351,8 -> 3,52e8); unidades (6,06e8) sin tocar.
+    panel = pd.DataFrame(
+        {"CommonStockSharesOutstanding": [189_461.0, 351.8, 606_000_000.0]},
+        index=pd.to_datetime(["2018-12-31", "2019-12-31", "2020-12-31"]),
+    )
+    out = metrics.shares_outstanding(panel)
+    assert out.iloc[0] == pytest.approx(189_461_000.0)  # miles -> unidades
+    assert out.iloc[1] == pytest.approx(351_800_000.0)  # millones -> unidades
+    assert out.iloc[2] == pytest.approx(606_000_000.0)  # ya en unidades, sin cambio
+
+
+def test_shares_outstanding_passes_through_nan_and_zero():
+    panel = pd.DataFrame(
+        {"CommonStockSharesOutstanding": [float("nan"), 0.0]},
+        index=pd.to_datetime(["2019-12-31", "2020-12-31"]),
+    )
+    out = metrics.shares_outstanding(panel)
+    assert pd.isna(out.iloc[0])
+    assert out.iloc[1] == 0.0
+
+
+def test_share_growth_scale_invariant():
+    # Aunque la escala se normalice, el ratio de dilución no cambia.
+    panel = pd.DataFrame(
+        {"CommonStockSharesOutstanding": [100.0, 101.0]},  # se normalizan ambos por igual
+        index=pd.to_datetime(["2019-12-31", "2020-12-31"]),
+    )
+    sg = metrics.share_growth(panel)
+    assert sg.iloc[-1] == pytest.approx(0.01)
+
+
 def test_safe_div_handles_zero():
     num = pd.Series([10.0, 5.0])
     den = pd.Series([0.0, 2.0])

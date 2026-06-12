@@ -106,11 +106,19 @@ class _Portfolio:
 # ---------------------------------------------------------------------------
 # Calendario y series de mercado
 # ---------------------------------------------------------------------------
-def _wide_prices(prices_df: pd.DataFrame, master: pd.DatetimeIndex) -> pd.DataFrame:
-    """Panel ancho (fecha × ticker) de cierres, alineado al calendario y *forward-filled*."""
+def _wide_prices(
+    prices_df: pd.DataFrame, master: pd.DatetimeIndex, field: str = "close"
+) -> pd.DataFrame:
+    """Panel ancho (fecha × ticker) de cierres, alineado al calendario y *forward-filled*.
+
+    `field` elige la columna de precio: "close" (ajustado, para operaciones y valor de
+    la cartera) o "close_unadj" (sin ajustar, para comparar con el valor intrínseco).
+    Si la columna pedida no existe, cae a "close".
+    """
     if prices_df.empty:
         return pd.DataFrame(index=master)
-    wide = prices_df.pivot_table(index="date", columns="ticker", values="close").sort_index()
+    col = field if field in prices_df.columns else "close"
+    wide = prices_df.pivot_table(index="date", columns="ticker", values=col).sort_index()
     return wide.reindex(wide.index.union(master)).ffill().reindex(master)
 
 
@@ -186,7 +194,8 @@ def run_backtest(
         empty = pd.DataFrame()
         return {"equity_curve": empty, "trades": empty, "holdings": empty}
 
-    wide = _wide_prices(prices_df, master)
+    wide = _wide_prices(prices_df, master)  # ajustado: operaciones y valor de la cartera
+    wide_unadj = _wide_prices(prices_df, master, field="close_unadj")  # real: valor↔precio
     index_series = _aligned_series(index_df, master)
     rf_series = _aligned_series(rf_df, master, scale=1.0 / 100.0)
 
@@ -198,10 +207,18 @@ def run_backtest(
     curve_rows: list[dict] = []
 
     def price_of(ticker: str) -> float:
+        """Precio ajustado vigente (operaciones y valor de la cartera)."""
         if ticker in wide.columns:
             value = wide.at[current_date, ticker]
             return float(value) if pd.notna(value) else float("nan")
         return float("nan")
+
+    def price_unadj_of(ticker: str) -> float:
+        """Precio sin ajustar vigente (para comparar con el valor intrínseco)."""
+        if ticker in wide_unadj.columns:
+            value = wide_unadj.at[current_date, ticker]
+            return float(value) if pd.notna(value) else float("nan")
+        return price_of(ticker)
 
     index_base = index_series.iloc[0] if pd.notna(index_series.iloc[0]) else None
     prev_date: pd.Timestamp | None = None
@@ -224,6 +241,7 @@ def run_backtest(
                 current_date,
                 last_selection,
                 price_of,
+                price_unadj_of,
                 sell_threshold,
                 max_positions,
                 min_margin,
@@ -288,17 +306,29 @@ def _annual_review(pf, date, select_fn, price_of) -> pd.DataFrame:
 
 
 def _weekly_monitor(
-    pf, date, last_selection, price_of, sell_threshold, max_positions, min_margin, min_quality
+    pf,
+    date,
+    last_selection,
+    price_of,
+    price_unadj_of,
+    sell_threshold,
+    max_positions,
+    min_margin,
+    min_quality,
 ):
-    """Ventas por convergencia y redespliegue de la caja liberada."""
+    """Ventas por convergencia y redespliegue de la caja liberada.
+
+    La decisión (¿sigue barata respecto al valor intrínseco?) compara el valor con el
+    precio **sin ajustar** (misma base); la **ejecución** usa el precio ajustado.
+    """
     # Ventas por convergencia: el precio ha alcanzado el valor de referencia
     for ticker in list(pf.positions):
-        price = price_of(ticker)
+        price_cmp = price_unadj_of(ticker)
         ref = pf.ref_value.get(ticker, float("nan"))
-        if pd.notna(ref) and ref > 0 and pd.notna(price):
-            margin = (ref - price) / ref
+        if pd.notna(ref) and ref > 0 and pd.notna(price_cmp):
+            margin = (ref - price_cmp) / ref
             if margin < sell_threshold:
-                pf.sell_all(date, ticker, price, "convergencia")
+                pf.sell_all(date, ticker, price_of(ticker), "convergencia")
 
     # Redespliegue: recomprar las siguientes candidatas elegibles al precio actual
     if last_selection is None or last_selection.empty:
@@ -317,12 +347,13 @@ def _weekly_monitor(
             continue
         if pd.isna(row.quality_score) or row.quality_score < min_quality:
             continue
-        price = price_of(ticker)
-        if pd.isna(price) or price <= 0:
+        price_exec = price_of(ticker)
+        price_cmp = price_unadj_of(ticker)
+        if pd.isna(price_exec) or price_exec <= 0 or pd.isna(price_cmp):
             continue
-        if (value - price) / value < min_margin:  # ya no cumple el margen al precio actual
+        if (value - price_cmp) / value < min_margin:  # ya no cumple el margen al precio actual
             continue
-        pf.buy_value(date, ticker, slot, price, "redespliegue")
+        pf.buy_value(date, ticker, slot, price_exec, "redespliegue")
         if ticker in pf.positions:
             pf.ref_value[ticker] = value
 

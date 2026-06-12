@@ -167,6 +167,12 @@ fundamentals:
   # instantes de balance solo se conservan si caen en un cierre de año fiscal.
   annual_period_days_min: 300
   annual_period_days_max: 400
+  # Normalización de la escala del número de acciones: algunas empresas reportan
+  # `shares` en miles o millones. Si el valor resuelto cae por debajo del mínimo
+  # plausible, se multiplica por el paso (×1000) hasta alcanzarlo (miles/millones →
+  # unidades). Evita valores por acción disparados en la valoración.
+  min_plausible_shares: 1000000
+  shares_scale_step: 1000
   concept_map:
     # --- Cuenta de resultados ---
     revenue:

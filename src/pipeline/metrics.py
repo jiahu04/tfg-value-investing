@@ -52,6 +52,27 @@ def _safe_div(num: pd.Series, den: pd.Series) -> pd.Series:
     return result.replace([np.inf, -np.inf], np.nan)
 
 
+def _scale_shares(value: float, floor: float, step: float) -> float:
+    """Normaliza la escala de un número de acciones a unidades.
+
+    Algunas empresas reportan las acciones en miles o millones. Si el valor es positivo
+    pero cae por debajo del mínimo plausible, se multiplica por `step` hasta alcanzarlo.
+    NaN/0 pasan tal cual; `step <= 1` desactiva la normalización (evita bucles).
+    """
+    if pd.isna(value) or value <= 0 or step <= 1:
+        return value
+    while value < floor:
+        value *= step
+    return float(value)
+
+
+def shares_outstanding(panel: pd.DataFrame) -> pd.Series:
+    """Acciones en circulación (magnitud `shares`) con la escala normalizada a unidades."""
+    floor = get_config("fundamentals.min_plausible_shares", 1_000_000)
+    step = get_config("fundamentals.shares_scale_step", 1000)
+    return _resolve(panel, "shares").map(lambda v: _scale_shares(v, floor, step))
+
+
 # ---------------------------------------------------------------------------
 # Magnitudes derivadas (cada una opera sobre el panel y devuelve una serie anual)
 # ---------------------------------------------------------------------------
@@ -131,7 +152,7 @@ def share_growth(panel: pd.DataFrame) -> pd.Series:
     `fill_method=None` evita rellenar huecos: un año sin dato queda NaN en lugar de
     fabricar una variación del 0 %.
     """
-    return _resolve(panel, "shares").pct_change(fill_method=None)
+    return shares_outstanding(panel).pct_change(fill_method=None)
 
 
 def cfo_to_net_income(panel: pd.DataFrame) -> pd.Series:
@@ -181,7 +202,7 @@ def compute_metrics(panel: pd.DataFrame) -> pd.DataFrame:
         "cash": _resolve(panel, "cash"),
         "short_term_investments": _resolve(panel, "short_term_investments"),
         "equity": _resolve(panel, "equity"),
-        "shares": _resolve(panel, "shares"),
+        "shares": shares_outstanding(panel),
         # Métricas derivadas
         "ebit": ebit_s,
         "ebitda": ebitda_s,

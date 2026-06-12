@@ -18,6 +18,30 @@ def _panel(**cols) -> pd.DataFrame:
     return pd.DataFrame(cols, index=idx)
 
 
+# --- price_asof: base ajustada vs sin ajustar ------------------------------------
+def test_price_asof_uses_unadjusted_by_default():
+    prices = pd.DataFrame(
+        {
+            "date": pd.to_datetime(["2019-05-01"]),
+            "ticker": ["AAA"],
+            "close": [10.0],  # ajustado
+            "close_unadj": [135.0],  # sin ajustar (precio real)
+        }
+    )
+    # Por defecto usa el precio real (sin ajustar), comparable con el valor por acción.
+    assert valuation.price_asof(prices, "AAA", "2019-06-01") == 135.0
+    # Pero la beta/operaciones pueden pedir el ajustado explícitamente.
+    assert valuation.price_asof(prices, "AAA", "2019-06-01", field="close") == 10.0
+
+
+def test_price_asof_falls_back_to_close():
+    # Caché antigua sin close_unadj: cae a close.
+    prices = pd.DataFrame(
+        {"date": pd.to_datetime(["2019-05-01"]), "ticker": ["AAA"], "close": [42.0]}
+    )
+    assert valuation.price_asof(prices, "AAA", "2019-06-01") == 42.0
+
+
 # --- Graham Number (valor de referencia) ----------------------------------------
 def test_graham_number_reference():
     # EPS=3, BVPS=20 -> sqrt(22.5 * 3 * 20) = sqrt(1350) = 36.7423
@@ -123,12 +147,13 @@ def test_beta_insufficient_history_uses_default():
 def _peer_fundamentals() -> pd.DataFrame:
     cols = ["ticker", "concept", "start", "end", "val", "form", "filed"]
     rows = []
-    # Tres pares con beneficio 100 y 10 acciones; EBIT negativo para aislar el PER
+    # Tres pares con beneficio 1e7 y 1e6 acciones (escala realista, sin normalización);
+    # EBIT negativo para aislar el PER. PER = market_cap/beneficio = price*1e6/1e7.
     for tk in ("P1", "P2", "P3"):
         for concept, val in [
-            ("NetIncomeLoss", 100.0),
+            ("NetIncomeLoss", 1e7),
             ("OperatingIncomeLoss", -1.0),
-            ("CommonStockSharesOutstanding", 10.0),
+            ("CommonStockSharesOutstanding", 1e6),
         ]:
             rows.append([tk, concept, "2020-01-01", "2020-12-31", val, "10-K", "2021-02-15"])
     df = pd.DataFrame(rows, columns=cols)
@@ -152,7 +177,7 @@ def test_multiples_use_sector_median():
         fundamentals, sectors, prices, "P2", ["P1", "P2", "P3"], "2021-06-01"
     )
     assert out["pe"] == pytest.approx(20.0)
-    # PER mediana 20 aplicado al beneficio 100 / 10 acciones = 200 por acción
+    # PER mediana 20 aplicado al beneficio 1e7 / 1e6 acciones = 200 por acción
     assert out["multiples_value"] == pytest.approx(200.0)
 
 

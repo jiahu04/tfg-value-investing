@@ -84,6 +84,35 @@ def test_buy_convergence_sell_and_redeploy():
     assert has("buy", "Y", "redespliegue")  # redespliegue de la caja liberada
 
 
+def test_convergence_uses_unadjusted_price():
+    # close (ajustado) bajo y constante; close_unadj (real) converge al valor 100.
+    # La convergencia debe dispararse por el precio SIN ajustar, no por el ajustado.
+    dates = pd.date_range("2018-06-04", periods=20, freq="7D")
+    unadj = [50.0] * 10 + [98.0] * 10  # real: converge a 100
+    rows = [
+        {"date": d, "ticker": "X", "close": 10.0, "close_unadj": unadj[i]}
+        for i, d in enumerate(dates)
+    ]
+    prices = pd.DataFrame(rows)
+
+    def select_fn(asof):
+        return pd.DataFrame([["X", True, True, 1.0, 100.0, 0.9]], columns=_SEL_COLS)
+
+    result = run_backtest(
+        "2018-01-01",
+        "2019-12-31",
+        prices_df=prices,
+        index_df=_index(dates),
+        rf_df=_rf(dates),
+        select_fn=select_fn,
+    )
+    sell = result["trades"]
+    sell = sell[(sell["action"] == "sell") & (sell["reason"] == "convergencia")]
+    assert not sell.empty  # vendió por convergencia (solo posible mirando close_unadj)
+    # La ejecución usa el precio ajustado (~10), no el real (~98)
+    assert sell.iloc[0]["price"] == pytest.approx(10.0)
+
+
 def test_transaction_cost_applied():
     dates, prices, select_fn = _convergence_scenario()
     result = run_backtest(

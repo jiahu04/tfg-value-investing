@@ -386,6 +386,7 @@ backtest:
   sensitivity:
     - {param: "portfolio.min_margin_of_safety", values: [0.20, 0.30, 0.40]}
     - {param: "quality.min_quality_score", values: [0.40, 0.50, 0.60]}
+    - {param: "portfolio.max_positions", values: [10, 12, 15, 20]}
 
 # -----------------------------------------------------------------------------
 # Simulación de aportación (B2)

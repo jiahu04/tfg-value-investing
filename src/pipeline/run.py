@@ -19,6 +19,7 @@ precios ≤ D). Una sola orden lo ejecuta:
 from __future__ import annotations
 
 import argparse
+from collections import defaultdict
 from datetime import date
 from pathlib import Path
 
@@ -31,7 +32,7 @@ from src.pipeline.metrics import annual_metrics
 from src.pipeline.point_in_time import load_fundamentals
 from src.pipeline.portfolio import build_portfolio, margin_of_safety
 from src.pipeline.quality import quality_score
-from src.pipeline.valuation import intrinsic_value
+from src.pipeline.valuation import _market_snapshot, intrinsic_value, price_asof
 from src.utils.config_loader import get_config
 
 _PROJECT_ROOT = Path(__file__).resolve().parents[2]
@@ -124,8 +125,37 @@ def run_pipeline(
 
     sector_map = dict(zip(sectors_df["ticker"], sectors_df["sector"], strict=False))
 
+    # --- Precómputo por corrida (asof fijo): evita escaneos y recálculos redundantes ---
+    # Agrupar por ticker UNA vez (lookups O(1) en vez de escanear ~2 M filas por empresa).
+    fund_by_ticker = dict(tuple(fundamentals.groupby("ticker"))) if not fundamentals.empty else {}
+    prices_by_ticker = dict(tuple(prices_df.groupby("ticker"))) if not prices_df.empty else {}
+    empty_fund = fundamentals.iloc[0:0]
+    empty_prices = prices_df.iloc[0:0]
+
+    # Panel de métricas de cada empresa del universo, calculado UNA vez (memoización).
+    metrics_by_ticker = {
+        t: annual_metrics(fund_by_ticker.get(t, empty_fund), t, asof) for t in universe
+    }
+    # Foto de mercado (market cap, EV, magnitudes) por ticker y agrupada por sector, UNA vez.
+    snapshot_by_ticker = {
+        t: _market_snapshot(
+            empty_fund,
+            empty_prices,
+            t,
+            asof,
+            metrics=metrics_by_ticker[t],
+            price=price_asof(prices_by_ticker.get(t, empty_prices), t, asof),
+        )
+        for t in universe
+    }
+    snapshots_by_sector: dict[str | None, list] = defaultdict(list)
+    for t in universe:
+        snapshots_by_sector[sector_map.get(t)].append(snapshot_by_ticker[t])
+
     # Etapa 2 — filtros (traza de todo el universo)
-    trace = filter_universe(fundamentals, sectors_df, universe, asof)
+    trace = filter_universe(
+        fundamentals, sectors_df, universe, asof, metrics_by_ticker=metrics_by_ticker
+    )
 
     # Etapas 3–5 — solo para los supervivientes
     rows: list[dict] = []
@@ -144,11 +174,21 @@ def run_pipeline(
             "margin_of_safety": float("nan"),
         }
         if record.passed:
-            metrics = annual_metrics(fundamentals, record.ticker, asof)
-            quality = quality_score(metrics)
+            quality = quality_score(metrics_by_ticker[record.ticker])
             peers = [t for t in universe if sector_map.get(t) == record.sector]
             value = intrinsic_value(
-                fundamentals, sectors_df, prices_df, index_df, rf_df, record.ticker, peers, asof
+                fundamentals,
+                sectors_df,
+                prices_df,
+                index_df,
+                rf_df,
+                record.ticker,
+                peers,
+                asof,
+                metrics_by_ticker=metrics_by_ticker,
+                prices_by_ticker=prices_by_ticker,
+                peer_snapshots=snapshots_by_sector.get(record.sector, []),
+                target_snapshot=snapshot_by_ticker.get(record.ticker),
             )
             row["fscore"] = quality["fscore"]
             row["quality_score"] = quality["quality_score"]

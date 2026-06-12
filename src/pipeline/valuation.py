@@ -293,13 +293,22 @@ def _market_snapshot(
     prices_df: pd.DataFrame,
     ticker: str,
     asof: str | pd.Timestamp,
+    *,
+    metrics: pd.DataFrame | None = None,
+    price: float | None = None,
 ) -> dict | None:
-    """Foto a fecha D: market cap, EV y magnitudes del último año. None si falta lo esencial."""
-    metrics = annual_metrics(fundamentals, ticker, asof)
+    """Foto a fecha D: market cap, EV y magnitudes del último año. None si falta lo esencial.
+
+    `metrics`/`price` permiten inyectar el panel y el precio ya calculados (optimización:
+    evita recomputar). Si no se pasan, se calculan a partir de los DataFrames.
+    """
+    if metrics is None:
+        metrics = annual_metrics(fundamentals, ticker, asof)
     if metrics.empty:
         return None
     last = metrics.iloc[-1]
-    price = price_asof(prices_df, ticker, asof)
+    if price is None:
+        price = price_asof(prices_df, ticker, asof)
     shares = last["shares"]
     if pd.isna(price) or pd.isna(shares) or shares <= 0:
         return None
@@ -324,18 +333,27 @@ def multiples_value(
     ticker: str,
     peers: list[str],
     asof: str | pd.Timestamp,
+    *,
+    peer_snapshots: list[dict] | None = None,
+    target_snapshot: dict | None = None,
 ) -> dict:
     """Valor por acción implícito en la mediana sectorial de PER, EV/EBIT, EV/EBITDA, P/FCF.
 
     Para cada par del sector calcula los múltiplos con denominador positivo, toma la
     mediana (percentil `valuation.multiples.sector_percentile`) y la aplica al objetivo.
     Combina los cuatro valores implícitos por acción con la media.
+
+    Optimización: `peer_snapshots` (lista de fotos del sector ya calculadas) y
+    `target_snapshot` (foto del objetivo) evitan recomputar `_market_snapshot` por cada
+    candidata del sector (coste O(N²)). Sin ellos, se calculan a partir de los DataFrames.
     """
     quantile = get_config("valuation.multiples.sector_percentile", 50) / 100.0
 
+    if peer_snapshots is None:
+        peer_snapshots = [_market_snapshot(fundamentals, prices_df, peer, asof) for peer in peers]
+
     pe, ev_ebit, ev_ebitda, p_fcf = [], [], [], []
-    for peer in peers:
-        snap = _market_snapshot(fundamentals, prices_df, peer, asof)
+    for snap in peer_snapshots:
         if snap is None:
             continue
         if pd.notna(snap["net_income"]) and snap["net_income"] > 0:
@@ -357,7 +375,11 @@ def multiples_value(
         median(p_fcf),
     )
 
-    target = _market_snapshot(fundamentals, prices_df, ticker, asof)
+    target = (
+        target_snapshot
+        if target_snapshot is not None
+        else _market_snapshot(fundamentals, prices_df, ticker, asof)
+    )
     result = {
         "multiples_value": np.nan,
         "pe": m_pe,
@@ -407,8 +429,17 @@ def intrinsic_value(
     ticker: str,
     peers: list[str],
     asof: str | pd.Timestamp,
+    *,
+    metrics_by_ticker: dict[str, pd.DataFrame] | None = None,
+    prices_by_ticker: dict[str, pd.DataFrame] | None = None,
+    peer_snapshots: list[dict] | None = None,
+    target_snapshot: dict | None = None,
 ) -> dict:
     """Estima el valor intrínseco por acción integrando DCF, múltiplos y Graham.
+
+    Optimización (mismos resultados): si se pasan `metrics_by_ticker` (paneles ya
+    calculados), `prices_by_ticker` (subframes de precio por ticker) y los snapshots del
+    sector/objetivo ya calculados, se reutilizan en vez de recomputar/reescanear.
 
     Returns:
         dict con dcf, dcf_low/high, multiples, graham, wacc, beta, price y el rango
@@ -430,18 +461,25 @@ def intrinsic_value(
             "value_high",
         )
     }
-    metrics = annual_metrics(fundamentals, ticker, asof)
-    if metrics.empty:
+    metrics = (
+        metrics_by_ticker.get(ticker)
+        if metrics_by_ticker is not None
+        else annual_metrics(fundamentals, ticker, asof)
+    )
+    if metrics is None or metrics.empty:
         return nan_result
 
+    # Subframe de precios del ticker (lookups O(1) si viene del dict precomputado).
+    tprices = prices_by_ticker.get(ticker, prices_df) if prices_by_ticker is not None else prices_df
+
     last = metrics.iloc[-1]
-    price = price_asof(prices_df, ticker, asof)
+    price = price_asof(tprices, ticker, asof)
     shares = last["shares"]
     market_cap = price * shares if (pd.notna(price) and pd.notna(shares) and shares > 0) else np.nan
 
     # Coste de capital
     rf = risk_free_asof(rf_df, asof)
-    beta_value = beta(prices_df, index_df, ticker, asof)
+    beta_value = beta(tprices, index_df, ticker, asof)
     erp = get_config("valuation.dcf.equity_risk_premium", 0.055)
     size_premium = get_config("valuation.dcf.size_premium", 0.01)
     re = cost_of_equity(rf, beta_value, erp, size_premium)
@@ -456,9 +494,16 @@ def intrinsic_value(
 
     # Graham y múltiplos
     graham = graham_number(metrics)
-    multiples = multiples_value(fundamentals, sectors_df, prices_df, ticker, peers, asof)[
-        "multiples_value"
-    ]
+    multiples = multiples_value(
+        fundamentals,
+        sectors_df,
+        prices_df,
+        ticker,
+        peers,
+        asof,
+        peer_snapshots=peer_snapshots,
+        target_snapshot=target_snapshot,
+    )["multiples_value"]
 
     weights = {
         "dcf": get_config("valuation.integration.dcf_weight", 0.60),

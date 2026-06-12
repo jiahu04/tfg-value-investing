@@ -158,6 +158,8 @@ def filter_universe(
     sectors_df: pd.DataFrame,
     tickers: list[str],
     asof: str | pd.Timestamp,
+    *,
+    metrics_by_ticker: dict[str, pd.DataFrame] | None = None,
 ) -> pd.DataFrame:
     """Aplica los filtros a una lista de empresas a una fecha y devuelve la traza.
 
@@ -166,6 +168,8 @@ def filter_universe(
         sectors_df: Tabla ticker→sector (`data/cache/sectors.csv`).
         tickers: Empresas a evaluar.
         asof: Fecha de decisión D.
+        metrics_by_ticker: Paneles de métricas ya calculados por ticker (optimización: evita
+            recomputar `annual_metrics`). Si es None, se calculan aquí.
 
     Returns:
         DataFrame con columnas ticker, sector, passed y reasons (motivos unidos por ';').
@@ -175,7 +179,11 @@ def filter_universe(
     rows: list[dict] = []
     for ticker in tickers:
         ticker = ticker.upper()
-        metrics = annual_metrics(fundamentals, ticker, asof)
+        metrics = (
+            metrics_by_ticker.get(ticker)
+            if metrics_by_ticker is not None
+            else annual_metrics(fundamentals, ticker, asof)
+        )
         sector = sector_map.get(ticker)
         outcome = apply_filters(metrics, sector)
         rows.append(

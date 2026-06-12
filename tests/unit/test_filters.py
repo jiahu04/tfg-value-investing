@@ -221,3 +221,17 @@ def test_filter_universe_unknown_ticker_sin_datos():
     out = filter_universe(fundamentals, sectors, ["MISSING"], "2018-06-01")
     assert not out.iloc[0]["passed"]
     assert out.iloc[0]["reasons"] == "sin_datos"
+
+
+def test_filter_universe_with_precomputed_metrics_matches():
+    # Optimización: pasar metrics_by_ticker da EXACTAMENTE la misma traza que recomputar.
+    from src.pipeline.metrics import annual_metrics
+
+    fundamentals = _fundamentals(["GOOD", "BANKX"])
+    sectors = pd.DataFrame({"ticker": ["GOOD", "BANKX"], "sector": ["Manufacturing", "Banking"]})
+    tickers, asof = ["GOOD", "BANKX"], "2018-06-01"
+
+    naive = filter_universe(fundamentals, sectors, tickers, asof)
+    mbt = {t: annual_metrics(fundamentals, t, asof) for t in tickers}
+    opt = filter_universe(fundamentals, sectors, tickers, asof, metrics_by_ticker=mbt)
+    pd.testing.assert_frame_equal(naive, opt)

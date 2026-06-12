@@ -181,6 +181,51 @@ def test_multiples_use_sector_median():
     assert out["multiples_value"] == pytest.approx(200.0)
 
 
+# --- Optimización: los snapshots/métricas precomputados dan los MISMOS resultados ------
+def _peer_prices() -> pd.DataFrame:
+    return pd.DataFrame(
+        {
+            "date": pd.to_datetime(["2021-05-01"] * 3),
+            "ticker": ["P1", "P2", "P3"],
+            "close": [100.0, 200.0, 300.0],
+        }
+    )
+
+
+def test_market_snapshot_with_injected_metrics_matches():
+    from src.pipeline.metrics import annual_metrics
+
+    fundamentals, prices, asof = _peer_fundamentals(), _peer_prices(), "2021-06-01"
+    naive = valuation._market_snapshot(fundamentals, prices, "P1", asof)
+    m = annual_metrics(fundamentals, "P1", asof)
+    p = valuation.price_asof(prices, "P1", asof)
+    injected = valuation._market_snapshot(None, None, "P1", asof, metrics=m, price=p)
+    # assert_series_equal trata NaN==NaN (las fotos son idénticas).
+    pd.testing.assert_series_equal(pd.Series(injected), pd.Series(naive))
+
+
+def test_multiples_value_with_precomputed_snapshots_matches():
+    fundamentals, prices, asof = _peer_fundamentals(), _peer_prices(), "2021-06-01"
+    sectors = pd.DataFrame({"ticker": ["P1", "P2", "P3"], "sector": ["Manufacturing"] * 3})
+    peers = ["P1", "P2", "P3"]
+    naive = valuation.multiples_value(fundamentals, sectors, prices, "P2", peers, asof)
+
+    snaps = [valuation._market_snapshot(fundamentals, prices, p, asof) for p in peers]
+    target = valuation._market_snapshot(fundamentals, prices, "P2", asof)
+    opt = valuation.multiples_value(
+        fundamentals,
+        sectors,
+        prices,
+        "P2",
+        peers,
+        asof,
+        peer_snapshots=snaps,
+        target_snapshot=target,
+    )
+    assert opt["pe"] == pytest.approx(naive["pe"])
+    assert opt["multiples_value"] == pytest.approx(naive["multiples_value"])
+
+
 # --- Integración -----------------------------------------------------------------
 def test_weighted_central_renormalizes_over_non_nan():
     # graham NaN -> renormaliza sobre dcf+multiples: (0.6*100 + 0.3*80)/0.9 = 93.33

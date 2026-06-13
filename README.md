@@ -378,6 +378,19 @@ Deja en `outputs/figures/` cada figura en **PDF** (vectorial, para LaTeX) y **PN
 
 Los resultados (tablas LaTeX y gráficas) quedan en `outputs/`.
 
+### Ver los resultados en tabla (consola)
+
+Para revisar de un vistazo **todos los datos comparativos** (rentabilidad cartera vs índice, métricas por
+periodo, comparación de estrategias de aportación, selección y sensibilidad) **sin re-ejecutar** nada:
+
+```bash
+python -m src.reporting.report
+```
+
+Lee los CSV de `outputs/tables/` y los imprime formateados en segundos. Es el equivalente "en tabla" de
+`src.reporting.figures` (lo mismo, pero en imagen). *(Alternativa: abrir los `.csv` de `outputs/tables/` en
+Excel o en el Data Wrangler de VSCode.)*
+
 Para forzar una descarga limpia de datos:
 ```bash
 rm -rf data/cache/ data/raw/     # macOS / Linux
@@ -517,6 +530,7 @@ python -m src.pipeline.run --date 2019-06-01   # lista priorizada a una fecha
 python -m src.backtest.run                     # backtest cartera vs índice + métricas
 python -m src.backtest.run --sensitivity       # + análisis de sensibilidad (~40-50 min)
 python -m src.contributions.run                # estrategias de aportación (TIR/MWR)
+python -m src.reporting.report                 # resumen de TODOS los resultados en tabla (consola)
 python -m src.reporting.figures                # figuras (PDF+PNG) en outputs/figures/
 
 # ── Git ───────────────────────────────────────────────────────────────────────

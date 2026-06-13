@@ -15,6 +15,7 @@ from src.utils.config_loader import get_config, load_config, reload_config
 # Fixtures
 # ---------------------------------------------------------------------------
 
+
 @pytest.fixture(autouse=True)
 def clear_config_cache():
     """Limpia la caché del config loader antes y después de cada test."""
@@ -27,6 +28,7 @@ def clear_config_cache():
 # Tests
 # ---------------------------------------------------------------------------
 
+
 class TestLoadConfig:
     def test_loads_default_config(self):
         """La configuración por defecto se carga sin errores."""
@@ -37,9 +39,19 @@ class TestLoadConfig:
     def test_required_sections_present(self):
         """Las secciones principales del sistema existen en config.yaml."""
         cfg = load_config()
-        expected_sections = {"sec", "universe", "prices", "cache", "filters",
-                             "quality", "valuation", "portfolio", "backtest",
-                             "contributions", "outputs"}
+        expected_sections = {
+            "sec",
+            "universe",
+            "prices",
+            "cache",
+            "filters",
+            "quality",
+            "valuation",
+            "portfolio",
+            "backtest",
+            "contributions",
+            "outputs",
+        }
         missing = expected_sections - set(cfg.keys())
         assert not missing, f"Secciones ausentes en config.yaml: {missing}"
 

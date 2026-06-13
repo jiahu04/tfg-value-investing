@@ -85,11 +85,15 @@ def to_tidy_close(raw: pd.DataFrame, default_ticker: str | None = None) -> pd.Da
 
     adj_field = _ADJ_FIELD if _has_field(raw, _ADJ_FIELD) else _RAW_FIELD
     adj = _extract_field(raw, adj_field, default_ticker).rename(columns={"value": "close"})
-    raw_close = _extract_field(raw, _RAW_FIELD, default_ticker).rename(columns={"value": "raw_close"})
+    raw_close = _extract_field(raw, _RAW_FIELD, default_ticker).rename(
+        columns={"value": "raw_close"}
+    )
     long = adj.merge(raw_close, on=["date", "ticker"], how="left")
 
     if _has_field(raw, _SPLIT_FIELD):
-        splits = _extract_field(raw, _SPLIT_FIELD, default_ticker).rename(columns={"value": "split"})
+        splits = _extract_field(raw, _SPLIT_FIELD, default_ticker).rename(
+            columns={"value": "split"}
+        )
         long = long.merge(splits, on=["date", "ticker"], how="left")
     else:
         long["split"] = 1.0

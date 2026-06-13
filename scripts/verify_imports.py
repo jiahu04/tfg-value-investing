@@ -15,7 +15,7 @@ REQUIRED = [
     ("scipy", None),
     ("scipy.stats", None),
     ("requests", None),
-    ("yaml", None),           # PyYAML
+    ("yaml", None),  # PyYAML
     ("pyarrow", None),
     ("yfinance", "yf"),
     ("numpy_financial", "npf"),
@@ -24,6 +24,7 @@ REQUIRED = [
     ("pytest", None),
     ("ruff", None),
 ]
+
 
 def check_imports() -> bool:
     """Intenta importar todas las librerías y reporta el resultado."""
@@ -48,6 +49,7 @@ def check_imports() -> bool:
     try:
         sys.path.insert(0, str(__import__("pathlib").Path(__file__).resolve().parent.parent))
         from src.utils.config_loader import load_config
+
         cfg = load_config()
         print(f"  {'config_loader':<{max_len}}  OK  (config.yaml leído, {len(cfg)} secciones)")
     except Exception as e:
@@ -56,9 +58,9 @@ def check_imports() -> bool:
 
     print()
     if all_ok:
-        print("✓ Todo correcto. El entorno está listo.")
+        print("[OK] Todo correcto. El entorno está listo.")
     else:
-        print("✗ Hay errores. Revisa los mensajes anteriores y ejecuta:")
+        print("[ERROR] Hay errores. Revisa los mensajes anteriores y ejecuta:")
         print("    pip install -r requirements.txt")
 
     return all_ok

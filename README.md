@@ -98,7 +98,7 @@ sec:
 python scripts/verify_imports.py
 ```
 
-Si termina con `✓ Todo correcto. El entorno está listo.` ya puedes trabajar.
+Si termina con `[OK] Todo correcto. El entorno está listo.` ya puedes trabajar.
 
 ---
 
@@ -126,6 +126,23 @@ Todos los parámetros del sistema están en **`config/config.yaml`**. Es el úni
 El único cambio obligatorio antes de ejecutar el pipeline es el correo de la SEC (paso 2.5). El resto de valores son los defaults del TFG y reproducen los resultados de la memoria sin modificaciones.
 
 Para cambiar un parámetro y probar un escenario alternativo, edita el valor en `config.yaml` y vuelve a ejecutar. No hay que tocar el código.
+
+**Todos los umbrales están documentados *in situ*** (comentarios junto a cada valor en `config.yaml`); no se
+repiten aquí para evitar que diverjan. Secciones principales:
+
+| Sección | Qué controla |
+|---|---|
+| `sec` | SEC EDGAR: correo de contacto, rate-limit, reintentos y **conceptos XBRL** a extraer |
+| `universe` / `constituents` / `sectors` | universo histórico del S&P, ventana, mapa SIC→sector |
+| `prices` | tickers de índice (`^SP500TR`) y tipo libre (`^IRX`) |
+| `fundamentals` | capa point-in-time: anclaje anual, `concept_map`, normalización de acciones |
+| `filters` | Etapa 2: sectores excluidos, deuda, dilución, rentabilidad, calidad contable |
+| `quality` | Etapa 3: F-Score y puntuación de calidad |
+| `valuation` | Etapa 4: DCF (WACC/CAPM, crecimiento), Graham, múltiplos, integración |
+| `portfolio` | Etapa 5: margen mínimo, tope de posiciones, pesos de priorización |
+| `backtest` | cadencia, costes, calibración/validación, **barrido de sensibilidad** |
+| `contributions` | estrategias de aportación (DCA, condicional, concentrada) |
+| `outputs` | carpetas de tablas/figuras y formato de figura |
 
 ---
 
@@ -174,9 +191,32 @@ pytest tests/unit/test_config_loader.py -v
 # Solo los tests unitarios
 pytest tests/unit/
 
-# Solo los tests de integración (cuando existan)
+# Solo los tests de integración
 pytest tests/integration/
+```
 
+### Cobertura de pruebas (lógica crítica)
+
+La suite (**197 tests**) corre **sin red real** (datos sintéticos o *mocks*) y deja en verde, sobre todo, la
+lógica metodológicamente crítica:
+
+| Lógica crítica | Tests |
+|---|---|
+| **Anti-look-ahead** (en D solo datos con `filed ≤ D` y precios ≤ D) | `test_backtest_antilookahead.py`, `test_metrics.py`, `test_point_in_time.py` |
+| **Universo point-in-time** (`members_on`, mitiga supervivencia) | `test_constituents.py` |
+| **Reexpresiones y conservación de `filed`** | `test_sec_facts.py` |
+| **Base de valoración** (deshacer splits, escala de acciones, margen) | `test_prices.py`, `test_metrics.py`, `test_valuation.py`, `test_backtest_engine.py` |
+| **Motor de backtest** (altas/bajas, convergencia, costes) | `test_backtest_engine.py` |
+| **Métricas** (CAGR, alpha/beta, Sharpe, drawdown) con valores de referencia | `test_backtest_metrics.py` |
+| **Robustez de red** (reintentos ante 429/503 y cortes de conexión) | `test_http_client.py` |
+| **Sensibilidad y `config_override`** | `test_sensitivity.py`, `test_config_override.py` |
+| **Equivalencia de la optimización** (camino rápido == naive) | `test_valuation.py`, `test_filters.py` |
+| **Aportación** (TIR/MWR, las 3 estrategias se diferencian) | `test_contributions_strategies.py`, `test_contributions_run.py` |
+
+Regla del proyecto: **en los tests no se hace red**; la lógica pura (parseo, métricas, valoración) está
+separada de la descarga para poder probarla con datos sintéticos.
+
+---
 
 ## 7. Linting con ruff
 
@@ -345,6 +385,45 @@ rmdir /s data\cache & rmdir /s data\raw   # Windows
 python -m src.ingest.run_ingest --step all
 ```
 
+### Reproducir todos los resultados de principio a fin
+
+Secuencia completa desde cero (los comandos asumen Windows/PowerShell; en macOS/Linux usa el activador
+equivalente). `data/` y `outputs/` se regeneran; no se versionan.
+
+```powershell
+# 1) Entorno
+python -m venv .venv
+.\.venv\Scripts\Activate.ps1
+pip install -r requirements.txt
+# (editar el correo de la SEC en config/config.yaml -> sec.contact_email)
+
+# 2) Ingesta COMPLETA del universo (larga, ~15-40 min). Si se corta, RELANZA el mismo
+#    comando: reanuda desde data/raw (no re-descarga lo ya bajado).
+python -m src.ingest.run_ingest --step all
+
+# 3) Análisis (lee la caché; escribe en outputs/tables/)
+python -m src.pipeline.run --date 2019-06-01      # lista priorizada a una fecha (~36 s)
+python -m src.backtest.run                         # backtest 2013-2025 (~6-8 min)
+python -m src.contributions.run                    # estrategias de aportación (~6-8 min)
+# (opcional) python -m src.backtest.run --sensitivity   # robustez; ~40-50 min (10 backtests)
+
+# 4) Figuras (segundos; lee outputs/tables/, escribe outputs/figures/)
+python -m src.reporting.figures
+```
+
+**Resultados:** `outputs/tables/` (CSV + `.tex` para LaTeX) y `outputs/figures/` (PDF + PNG).
+
+**Notas operativas importantes:**
+- La ingesta es **reanudable**: cada empresa se guarda en `data/raw` justo tras descargarla; ante un corte de
+  la SEC, `get_json` reintenta y, si aún así aborta, **relanzar reanuda**.
+- Para refrescar **solo los precios** (sin re-bajar fundamentales): borra el parquet y reingesta —
+  `Remove-Item data\cache\prices.parquet` + `python -m src.ingest.run_ingest --step prices`. La descarga de
+  precios llega **hasta hoy** (no solo hasta `backtest_end`) para capturar splits recientes.
+- **No uses `--force` en `--step all`**: re-dispara el descubrimiento de constituyentes en GitHub y
+  re-descarga todo.
+- Con una **caché parcial** (pocas empresas) los resultados son ilustrativos; los representativos requieren la
+  ingesta completa.
+
 ---
 
 ## 9. Estructura del proyecto
@@ -367,15 +446,15 @@ value-investing-tfg/
 │   │   ├── constituents.py      ← composición histórica point-in-time
 │   │   └── run_ingest.py        ← orquestador/CLI (--step / --limit / --force)
 │   ├── pipeline/                ← Etapas 2–5: filtros, calidad, valoración, selección
-│   ├── backtest/                ← Módulo B1: motor de backtesting (2013–2025)
+│   ├── backtest/                ← Módulo B1: motor de backtesting (2013–2025) + métricas/sensibilidad
 │   ├── contributions/           ← Módulo B2: simulación de estrategias de aportación
-│   ├── reporting/               ← Gráficas y exportación de tablas a LaTeX
+│   ├── reporting/               ← figuras (figures.py) y exportación de tablas a LaTeX (latex.py)
 │   └── utils/
-│       └── config_loader.py     ← cargador de config.yaml (implementado)
+│       └── config_loader.py     ← cargador de config.yaml (con `config_override` para la sensibilidad)
 │
 ├── tests/
 │   ├── unit/                    ← tests por módulo (rápidos, sin datos reales)
-│   └── integration/             ← tests end-to-end (se añadirán en Fases 1–3)
+│   └── integration/             ← end-to-end (anti-look-ahead, pipeline, ingesta, aportación)
 │
 ├── data/                        ← excluido de Git, se regenera con el pipeline
 │   ├── raw/                     ← datos crudos de SEC EDGAR y yfinance
@@ -383,13 +462,16 @@ value-investing-tfg/
 │
 ├── docs/
 │   ├── registro_decisiones.md   ← decisiones de diseño con justificación
+│   ├── cuestiones_abiertas.md   ← backlog de cuestiones/mejoras (C-001…)
 │   ├── notas_memoria.md         ← contenido reutilizable para la memoria del TFG
 │   └── dev_notes.md             ← log de sesiones de desarrollo
 │
 ├── scripts/
 │   └── verify_imports.py        ← comprueba que el entorno está bien instalado
 │
-├── outputs/                     ← excluido de Git, generado por reporting/
+├── outputs/                     ← excluido de Git; tablas (.csv/.tex) y figuras (.pdf/.png)
+│   ├── tables/                  ← generadas por el análisis (backtest, aportación, selección)
+│   └── figures/                 ← generadas por reporting/figures.py
 │
 ├── .gitignore
 ├── pyproject.toml               ← configuración de pytest y ruff
@@ -428,6 +510,15 @@ ruff check src/                               # solo el código fuente
 ruff check --fix .                            # corregir automáticamente
 ruff check --diff .                           # ver qué corregiría sin aplicar
 
+# ── Análisis (resultados) ─────────────────────────────────────────────────────
+python -m src.ingest.run_ingest --step all    # ingesta completa (larga; reanudable)
+python -m src.ingest.run_ingest --step all --limit 30   # prueba rápida (30 empresas)
+python -m src.pipeline.run --date 2019-06-01   # lista priorizada a una fecha
+python -m src.backtest.run                     # backtest cartera vs índice + métricas
+python -m src.backtest.run --sensitivity       # + análisis de sensibilidad (~40-50 min)
+python -m src.contributions.run                # estrategias de aportación (TIR/MWR)
+python -m src.reporting.figures                # figuras (PDF+PNG) en outputs/figures/
+
 # ── Git ───────────────────────────────────────────────────────────────────────
 git status                                    # ver estado del repo
 git add .                                     # añadir todos los cambios
@@ -451,6 +542,18 @@ El entorno virtual no está activo. Actívalo con `.venv\Scripts\activate` (Wind
 
 **`ruff` no se reconoce como comando**
 El entorno virtual no está activo, o las dependencias no están instaladas. Activa el entorno y ejecuta `pip install -r requirements.txt`.
+
+**La ingesta se corta con un error de conexión (`ConnectionResetError` / `WinError 10054`)**
+La SEC cierra la conexión esporádicamente. `get_json` reintenta; si aun así aborta, **relanza el mismo comando**: reanuda desde `data/raw` (no re-descarga lo ya bajado).
+
+**Quiero refrescar solo los precios sin re-bajar los fundamentales**
+Borra el parquet de precios y reingesta solo ese paso: `Remove-Item data\cache\prices.parquet` y luego `python -m src.ingest.run_ingest --step prices`. **No uses `--force`** en `--step all`/`--step prices`: re-dispara el descubrimiento de la URL de constituyentes en GitHub (puede fallar) y re-descarga todo.
+
+**Una empresa sale con un valor por acción/margen disparado**
+Casi siempre es un *split* muy reciente. Los precios se descargan **hasta hoy** para deshacer los splits; el único caso límite es una acción que parte **el mismo día** en que ejecutas (aún sin datos): se auto-corrige al día siguiente.
+
+**El backtest o `pipeline.run` tardan varios minutos**
+Es normal sobre el universo completo (~700 empresas): `pipeline.run` a una fecha ~36 s, el backtest ~6-8 min, `--sensitivity` ~40-50 min. Para una prueba rápida, usa una caché parcial (`--limit N` en la ingesta).
 
 **`FileNotFoundError: config/config.yaml`**
 Estás ejecutando Python desde un directorio que no es la raíz del proyecto. Haz `cd` hasta la raíz (la carpeta que contiene `config/`, `src/`, `tests/`, etc.) y vuelve a ejecutar.

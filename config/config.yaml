@@ -417,6 +417,19 @@ contributions:
     min: 0.35                    # solo dispara cuando abundan las oportunidades
     multiplier: 3.0              # 3× la aportación base
 
+  # --- Estrategias clásicas de la literatura (líneas base de comparación) ---
+  # Value averaging (Edleson): la cartera sigue una SENDA DE VALOR objetivo; cada periodo
+  # se aporta lo necesario para alcanzarla (variante solo-compra: no se retira el exceso).
+  value_averaging:
+    target_step: 1000.0          # incremento del valor objetivo por periodo
+    growth: 0.0                  # crecimiento compuesto opcional del objetivo (0 = senda lineal)
+    allow_selling: false         # false = solo compra; true = retira el exceso (VA puro)
+
+  # Drawdown-based (buy-the-dip): aporta más cuanto más cae el NAV desde su máximo previo.
+  drawdown_based:
+    ref_drawdown: 0.10           # caída del NAV a la que el factor EXTRA vale 1× (aporta 2× base)
+    max_scale_factor: 3.0        # tope del multiplicador
+
 # -----------------------------------------------------------------------------
 # Outputs
 # -----------------------------------------------------------------------------

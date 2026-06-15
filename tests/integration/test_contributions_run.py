@@ -11,6 +11,8 @@ _CFG = {
     "periodic_amount": 1000.0,
     "conditional_dca": {"base": 0.25, "suspend_below": 0.10, "max_scale_factor": 2.0},
     "concentrated": {"min": 0.35, "multiplier": 3.0},
+    "value_averaging": {"target_step": 1000.0, "growth": 0.0, "allow_selling": False},
+    "drawdown_based": {"ref_drawdown": 0.10, "max_scale_factor": 3.0},
 }
 
 
@@ -64,7 +66,13 @@ def test_end_to_end_table_and_latex(tmp_path):
     dates = run.contribution_dates(index, "monthly")
 
     table = compare_strategies(nav, signal, dates, cfg=_CFG)
-    assert list(table.index) == ["DCA fijo", "DCA condicional", "Concentrada"]
+    assert list(table.index) == [
+        "DCA fijo",
+        "DCA condicional",
+        "Concentrada",
+        "Value averaging",
+        "Drawdown-based",
+    ]
     # Señal 2/3 (>=0.35) constante: fijo y concentrada aportan todos los meses (plumbing).
     assert table.loc["DCA fijo", "n_aportaciones"] == len(dates)
     assert table.loc["Concentrada", "n_aportaciones"] == len(dates)

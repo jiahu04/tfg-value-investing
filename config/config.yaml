@@ -9,7 +9,7 @@
 # SEC EDGAR — fuente de datos fundamentales
 # -----------------------------------------------------------------------------
 sec:
-  contact_email: "jianwu.hu.04@gmail.com"   # EDITA ESTO: identificador requerido por la SEC
+  contact_email: "tu@correo.com"   # Identificador requerido por la SEC
   base_url: "https://data.sec.gov"
   submissions_url: "https://data.sec.gov/submissions"
   facts_url: "https://data.sec.gov/api/xbrl/companyfacts"
@@ -81,9 +81,9 @@ sec:
 universe:
   index: "SP500"
   # Número mínimo de años de histórico de fundamentales requeridos
-  min_history_years: 4
+  min_history_years: 4 #Los datos comienzan en 2009 si se cambian los años minimos (no recomdable se puede reducir el año de inicio del backtest según corresponda)
   # Fecha de inicio del backtest (se necesitan datos desde antes para el lookback)
-  backtest_start: "2013-01-01"
+  backtest_start: "2013-01-01" # No poner una fecha anterior a 2013 ya que los si se deja 4 años de histórico minimos
   backtest_end: "2025-12-31"
 
 # -----------------------------------------------------------------------------
@@ -107,6 +107,12 @@ constituents:
   # En 2026 lo renombró a un nombre ESTABLE sin fecha ("… (Updated).csv"), así que se
   # apunta directamente a él mediante `url`. La búsqueda dinámica (repo_contents_url +
   # file_pattern) queda como respaldo del esquema antiguo si `url` se deja vacía.
+  #
+  # SI FALLA la ingesta de constituyentes (el repo vuelve a renombrar/mover el CSV):
+  #   (a) abre https://github.com/fja05680/sp500, abre el CSV histórico, pulsa "Raw",
+  #       copia la URL y pégala aquí en `url`; o
+  #   (b) descarga el CSV a mano a data/raw/constituents/sp500_historical.csv (la ingesta
+  #       lo usa sin red si existe). El CSV debe tener cabecera `date,tickers`. Ver README §11.
   repo_contents_url: "https://api.github.com/repos/fja05680/sp500/contents"
   file_pattern: "S&P 500 Historical Components & Changes\\((\\d{2}-\\d{2}-\\d{4})\\)\\.csv"
   # URL directa del CSV histórico (estable). Si se deja vacía, se usa la búsqueda dinámica.

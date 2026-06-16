@@ -44,8 +44,8 @@ Ejecuta estos pasos en orden. Solo hay que hacerlos una vez.
 ### 2.1 Clonar el repositorio
 
 ```bash
-git clone https://github.com/<tu-usuario>/value-investing-tfg.git
-cd value-investing-tfg
+git clone https://github.com/jiahu04/tfg-value-investing.git
+cd tfg-value-investing
 ```
 
 ### 2.2 Crear el entorno virtual
@@ -89,7 +89,7 @@ Abre `config/config.yaml` y cambia el correo de contacto de la SEC:
 
 ```yaml
 sec:
-  contact_email: "tu@correo.com"   # ← cambia esto
+  contact_email: "tu@correo.com"   
 ```
 
 ### 2.6 Verificar que todo está bien
@@ -269,8 +269,6 @@ Antes de cada commit. Si ruff encuentra errores, el código no está listo para 
 
 ## 8. Ejecutar el pipeline
 
-> **Nota:** de momento está implementada la **Etapa 1 (adquisición de datos, paso 1.1)**. El resto de etapas (pipeline de selección, backtest y aportación) se irán añadiendo en las Fases 1–3 del plan.
-
 ### Ingesta de datos (Etapa 1)
 
 Descarga y cachea en local todos los datos: fundamentales de la SEC (conservando la fecha de publicación), precios de acciones, índice y tipo libre de riesgo, composición histórica del índice y sector por código SIC.
@@ -442,7 +440,7 @@ python -m src.reporting.figures
 ## 9. Estructura del proyecto
 
 ```
-value-investing-tfg/
+tfg-value-investing/
 │
 ├── config/
 │   └── config.yaml              ← TODOS los parámetros del sistema (editar aquí)
@@ -533,12 +531,6 @@ python -m src.contributions.run                # estrategias de aportación (TIR
 python -m src.reporting.report                 # resumen de TODOS los resultados en tabla (consola)
 python -m src.reporting.figures                # figuras (PDF+PNG) en outputs/figures/
 
-# ── Git ───────────────────────────────────────────────────────────────────────
-git status                                    # ver estado del repo
-git add .                                     # añadir todos los cambios
-git commit -m "mensaje"                       # hacer commit
-git push                                      # subir a GitHub
-git log --oneline                             # ver historial resumido
 ```
 
 ---
@@ -559,6 +551,13 @@ El entorno virtual no está activo, o las dependencias no están instaladas. Act
 
 **La ingesta se corta con un error de conexión (`ConnectionResetError` / `WinError 10054`)**
 La SEC cierra la conexión esporádicamente. `get_json` reintenta; si aun así aborta, **relanza el mismo comando**: reanuda desde `data/raw` (no re-descarga lo ya bajado).
+
+**La ingesta falla en el paso `constituents` (`RuntimeError: No se encontró ningún CSV histórico…`)**
+La composición histórica del S&P 500 se descarga del repo público `fja05680/sp500`, mantenido por terceros. Si su responsable **renombra o mueve el CSV**, el descubrimiento automático por patrón deja de encontrarlo (ocurrió en 2026: quitó la fecha del nombre del fichero). Dos formas de arreglarlo a mano:
+1. **Fijar la URL directa** (recomendado): entra en `https://github.com/fja05680/sp500`, abre el fichero `S&P 500 Historical Components & Changes … .csv`, pulsa **Raw**, copia la URL y pégala en `config/config.yaml` → `constituents.url`. Relanza `python -m src.ingest.run_ingest --step constituents`.
+2. **Descargar el CSV a mano**: guárdalo como `data/raw/constituents/sp500_historical.csv`; la ingesta usa ese crudo si existe, **sin descargar nada** de la red.
+
+El CSV debe tener cabecera `date,tickers` (los tickers separados por comas dentro de una celda). El valor por defecto de `constituents.url` ya apunta al fichero estable actual, así que en condiciones normales no hay que hacer nada.
 
 **Quiero refrescar solo los precios sin re-bajar los fundamentales**
 Borra el parquet de precios y reingesta solo ese paso: `Remove-Item data\cache\prices.parquet` y luego `python -m src.ingest.run_ingest --step prices`. **No uses `--force`** en `--step all`/`--step prices`: re-dispara el descubrimiento de la URL de constituyentes en GitHub (puede fallar) y re-descarga todo.

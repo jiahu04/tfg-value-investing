@@ -471,12 +471,6 @@ tfg-value-investing/
 │   ├── raw/                     ← datos crudos de SEC EDGAR y yfinance
 │   └── cache/                   ← datos procesados en formato Parquet
 │
-├── docs/
-│   ├── registro_decisiones.md   ← decisiones de diseño con justificación
-│   ├── cuestiones_abiertas.md   ← backlog de cuestiones/mejoras (C-001…)
-│   ├── notas_memoria.md         ← contenido reutilizable para la memoria del TFG
-│   └── dev_notes.md             ← log de sesiones de desarrollo
-│
 ├── scripts/
 │   └── verify_imports.py        ← comprueba que el entorno está bien instalado
 │
